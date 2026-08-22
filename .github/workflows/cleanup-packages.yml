@@ -32,3 +32,19 @@ jobs:
           package: ${{ matrix.package }}
           delete-untagged: true
           dry-run: ${{ inputs.dry_run }}
+
+      - name: Delete old commit-SHA tags of ${{ matrix.package }}
+        # The old (now-replaced) workflow tagged every single push with the
+        # full git commit SHA (e.g. eeb5907a2f2686643423d13e16044e2ffb008f0c
+        # — a 40-character hex string), leaving dozens of these around, each
+        # protecting its own untagged platform children from cleanup above.
+        # This regex matches exactly that pattern — nothing else — and
+        # exclude-tags is an extra safety net on top, in case the regex ever
+        # matches something unexpected.
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: ${{ matrix.package }}
+          delete-tags: '^[0-9a-f]{40}$'
+          use-regex: true
+          exclude-tags: 'latest,v1.0,3.2.11'
+          dry-run: ${{ inputs.dry_run }}
