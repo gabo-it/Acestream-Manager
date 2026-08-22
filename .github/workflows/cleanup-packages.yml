@@ -3,13 +3,14 @@ name: Cleanup Untagged Package Versions
 # Manual only: run from the Actions tab whenever you want to prune old
 # untagged/SHA-tagged image versions accumulated from past pushes. Never
 # runs automatically, so there's no risk of it firing unexpectedly.
+#
+# NOTE: this always deletes for real — actions/delete-package-versions@v5
+# does not actually support a dry-run input (an earlier version of this
+# workflow had one, but it was silently ignored). It only ever touches
+# UNTAGGED versions (delete-only-untagged-versions: true below), so tagged
+# versions like :latest, :v1.0, :3.2.11 are never at risk from this.
 on:
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Dry run (log what would be deleted, delete nothing)'
-        type: boolean
-        default: true
+  workflow_dispatch: {}
 
 jobs:
   cleanup:
@@ -25,8 +26,4 @@ jobs:
         with:
           package-name: ${{ matrix.package }}
           package-type: container
-          # Only removes versions with NO tag at all (the SHA-only/digest
-          # entries left behind by old builds) — tagged versions like
-          # :latest, :v1.0, :3.2.11 are never touched by this option.
           delete-only-untagged-versions: 'true'
-          dry-run: ${{ inputs.dry_run }}
