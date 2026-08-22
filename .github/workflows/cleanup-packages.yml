@@ -1,0 +1,32 @@
+name: Cleanup Untagged Package Versions
+
+# Manual only: run from the Actions tab whenever you want to prune old
+# untagged/SHA-tagged image versions accumulated from past pushes. Never
+# runs automatically, so there's no risk of it firing unexpectedly.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (log what would be deleted, delete nothing)'
+        type: boolean
+        default: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package: [acestream-engine, acestream-webui]
+    steps:
+      - name: Delete untagged versions of ${{ matrix.package }}
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          # Only removes versions with NO tag at all (the SHA-only/digest
+          # entries left behind by old builds) — tagged versions like
+          # :latest, :v1.0, :3.2.11 are never touched by this option.
+          delete-only-untagged-versions: 'true'
+          dry-run: ${{ inputs.dry_run }}
