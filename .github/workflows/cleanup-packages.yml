@@ -4,13 +4,18 @@ name: Cleanup Untagged Package Versions
 # untagged/SHA-tagged image versions accumulated from past pushes. Never
 # runs automatically, so there's no risk of it firing unexpectedly.
 #
-# NOTE: this always deletes for real — actions/delete-package-versions@v5
-# does not actually support a dry-run input (an earlier version of this
-# workflow had one, but it was silently ignored). It only ever touches
-# UNTAGGED versions (delete-only-untagged-versions: true below), so tagged
-# versions like :latest, :v1.0, :3.2.11 are never at risk from this.
+# Uses dataaxiom/ghcr-cleanup-action instead of actions/delete-package-versions:
+# the latter aborts the whole run on a single "Package not found" (404) —
+# which is exactly what happened here — while this one explicitly tolerates
+# isolated 404s and only fails on repeated ones (see its changelog). It also
+# has a real dry-run option, unlike an earlier version of this workflow.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (log what would be deleted, delete nothing)'
+        type: boolean
+        default: true
 
 jobs:
   cleanup:
@@ -22,8 +27,8 @@ jobs:
         package: [acestream-engine, acestream-webui]
     steps:
       - name: Delete untagged versions of ${{ matrix.package }}
-        uses: actions/delete-package-versions@v5
+        uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package-name: ${{ matrix.package }}
-          package-type: container
-          delete-only-untagged-versions: 'true'
+          package: ${{ matrix.package }}
+          delete-untagged: true
+          dry-run: ${{ inputs.dry_run }}
