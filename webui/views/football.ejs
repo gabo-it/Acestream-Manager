@@ -1,0 +1,54 @@
+<h1 class="text-2xl font-bold mb-2"><%= t('football.title') %></h1>
+<p class="text-sm text-slate-400 mb-6">
+  <%= t('football.subtitle') %>
+  <a href="https://www.livesoccertv.com/" target="_blank" rel="noopener" class="text-indigo-400 underline">livesoccertv.com</a>
+</p>
+
+<div class="rounded-lg border border-amber-900 bg-amber-950/30 text-amber-300 px-4 py-3 text-sm mb-6">
+  <%= t('football.experimental_note') %>
+</div>
+
+<form method="GET" action="/football" class="flex gap-2 mb-6 max-w-xl">
+  <input type="text" name="team" value="<%= team || '' %>" required placeholder="<%= t('football.placeholder') %>"
+         class="flex-1 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+  <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+    <%= t('football.search_btn') %>
+  </button>
+</form>
+
+<details class="mb-6 max-w-xl">
+  <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-400"><%= t('football.url_fallback_toggle') %></summary>
+  <div class="mt-3">
+    <p class="text-xs text-slate-500 mb-2"><%= t('football.url_fallback_help') %></p>
+    <form method="POST" action="/football/team-url" class="flex gap-2">
+      <input type="url" name="team_url" required placeholder="https://www.livesoccertv.com/teams/italy/inter-milan/"
+             class="flex-1 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500" />
+      <button class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm flex-shrink-0">
+        <%= t('football.url_fallback_go') %>
+      </button>
+    </form>
+  </div>
+</details>
+
+<% if (error) { %>
+  <div class="rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm mb-6">
+    <%= t('football.search_failed') %>: <%= error %>
+  </div>
+<% } %>
+
+<% if (team && !error) { %>
+  <% if (candidates.length === 0) { %>
+    <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400">
+      <%= t('football.no_teams') %>
+    </div>
+  <% } else { %>
+    <div class="grid gap-2">
+      <% candidates.forEach(function(c) { %>
+        <a href="/football/team?country=<%= encodeURIComponent(c.country) %>&slug=<%= encodeURIComponent(c.slug) %>&name=<%= encodeURIComponent(c.name) %>"
+           class="rounded-xl border border-slate-800 bg-slate-800/60 p-4 hover:border-indigo-500 transition block">
+          <%= c.name %>
+        </a>
+      <% }); %>
+    </div>
+  <% } %>
+<% } %>

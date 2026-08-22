@@ -1,0 +1,121 @@
+<h1 class="text-2xl font-bold mb-2"><%= t('search.title') %></h1>
+<p class="text-sm text-slate-400 mb-6"><%= t('search.subtitle') %></p>
+
+<form method="GET" action="/search" class="flex gap-2 mb-6 max-w-2xl flex-wrap">
+  <input type="text" name="q" value="<%= q || '' %>" placeholder="<%= t('search.placeholder') %>"
+         class="flex-1 min-w-[200px] rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+  <select name="category" class="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+    <option value=""><%= t('search.all_categories') %></option>
+    <% categories.forEach(function(c) { %>
+      <option value="<%= c %>" <%= category === c ? 'selected' : '' %>><%= c %></option>
+    <% }); %>
+  </select>
+  <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+    <%= t('search.btn') %>
+  </button>
+</form>
+
+<% if (error) { %>
+  <div class="rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm mb-6">
+    <%= t('search.failed') %>: <%= error %>
+    <div class="text-xs text-red-400 mt-1"><%= t('search.failed_hint') %></div>
+  </div>
+<% } %>
+
+<% if ((q || category) && !error) { %>
+  <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+    <p class="text-sm text-slate-500"><%= results.length %> <%= t('search.results_for') %> "<%= q || category %>"</p>
+    <% if (results.length > 0) { %>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm text-slate-400">
+          <input type="checkbox" id="search-select-all" class="rounded bg-slate-950 border-slate-700" onchange="toggleSearchAll(this)" />
+          <%= t('sources.select_all') %>
+        </label>
+        <button type="button" onclick="importSearchSelected()" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-3 py-1.5 text-sm font-medium">
+          <%= t('search.import_selected') %>
+        </button>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="grid gap-3">
+    <% results.forEach(function(r, i) { %>
+      <% const streamUrl = `${(acexyBaseUrl || '').replace(/\/$/, '')}/ace/getstream?id=${r.infohash}`; %>
+      <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4 flex items-center gap-4">
+        <input type="checkbox" class="search-checkbox rounded bg-slate-950 border-slate-700 flex-shrink-0" data-index="<%= i %>" />
+        <img src="<%= r.icon || 'https://placehold.co/64x64/1e293b/94a3b8?text=%20' %>"
+             class="w-12 h-12 rounded-lg object-cover bg-slate-800 flex-shrink-0" alt="" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full flex-shrink-0 <%= r.status === 2 ? 'bg-emerald-500' : 'bg-amber-500' %>"
+                  title="<%= r.status === 2 ? t('search.available') : t('search.uncertain') %>"></span>
+            <span class="font-medium truncate"><%= r.name %></span>
+            <% if (r.categories) { %>
+              <span class="text-xs rounded-full bg-slate-800 px-2 py-0.5 text-slate-400"><%= r.categories %></span>
+            <% } %>
+          </div>
+          <div class="text-xs text-slate-500 font-mono truncate"><%= r.infohash %></div>
+          <div class="flex items-center gap-3 mt-2 text-xs">
+            <a href="/watch-direct?id=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
+            <a href="/vlc-direct.m3u?id=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
+            <a href="acestream://<%= r.infohash %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.aceplayer') %></a>
+            <button type="button" onclick="copySearchLink('<%= streamUrl %>', this)" class="text-slate-400 hover:text-indigo-400 transition">
+              <%= t('channels.copy_link') %>
+            </button>
+          </div>
+        </div>
+        <form method="POST" action="/search/import" class="flex-shrink-0">
+          <input type="hidden" name="name" value="<%= r.name %>" />
+          <input type="hidden" name="infohash" value="<%= r.infohash %>" />
+          <input type="hidden" name="category" value="<%= r.categories %>" />
+          <input type="hidden" name="logo_url" value="<%= r.icon %>" />
+          <button class="text-sm text-indigo-400 hover:text-indigo-300 transition px-3 py-1.5 rounded-lg border border-slate-800">
+            <%= t('search.add') %>
+          </button>
+        </form>
+      </div>
+    <% }); %>
+    <% if (results.length === 0) { %>
+      <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400">
+        <%= t('search.no_results') %>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<script>
+  var searchResults = <%- JSON.stringify(results || []) %>;
+
+  function copySearchLink(url, btn) {
+    copyToClipboard(url).then(function () {
+      var original = btn.textContent;
+      btn.textContent = <%- JSON.stringify(t('channels.copied')) %>;
+      setTimeout(function () { btn.textContent = original; }, 1500);
+    }).catch(function (err) {
+      console.error('[copy] fallito:', err);
+      alert(url);
+    });
+  }
+
+  function toggleSearchAll(checkbox) {
+    document.querySelectorAll('.search-checkbox').forEach(function (cb) { cb.checked = checkbox.checked; });
+  }
+
+  function importSearchSelected() {
+    var selected = [];
+    document.querySelectorAll('.search-checkbox:checked').forEach(function (cb) {
+      var r = searchResults[parseInt(cb.dataset.index, 10)];
+      selected.push({ name: r.name, infohash: r.infohash, category: r.categories, logo_url: r.icon });
+    });
+    if (selected.length === 0) return;
+
+    fetch('/search/import-selected', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results: selected }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function () { window.location.href = '/'; })
+      .catch(function (err) { alert('Errore: ' + err.message); });
+  }
+</script>

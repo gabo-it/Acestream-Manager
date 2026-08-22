@@ -1,0 +1,376 @@
+<div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
+  <h1 class="text-2xl font-bold"><%= t('channels.title') %> <span class="text-slate-500 text-base font-normal">(<%= channels.length %>)</span></h1>
+  <div class="flex items-center gap-2">
+    <form method="GET" action="/" class="flex">
+      <input type="text" name="q" value="<%= q || '' %>" placeholder="<%= t('channels.search_placeholder') %>"
+             class="rounded-l-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 w-56" />
+      <button class="rounded-r-lg bg-slate-800 hover:bg-slate-700 transition px-3 text-sm"><%= t('channels.search_btn') %></button>
+    </form>
+    <form method="POST" action="/channels/check-all">
+      <button class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+        <%= t('channels.check_all') %>
+      </button>
+    </form>
+    <a href="/channels/new" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+      <%= t('channels.new') %>
+    </a>
+  </div>
+</div>
+
+<% if (channels.length === 0) { %>
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400">
+    <%= t('channels.empty') %>
+    <a href="/sources" class="text-indigo-400 underline"><%= t('nav.sources') %></a> ·
+    <a href="/search" class="text-indigo-400 underline"><%= t('nav.search') %></a> ·
+    <a href="/channels/new" class="text-indigo-400 underline"><%= t('channels.new') %></a>
+  </div>
+<% } else { %>
+  <form method="POST" action="/channels/bulk-delete" id="bulk-form">
+    <div class="flex items-center gap-3 mb-3 text-sm text-slate-400">
+      <label class="flex items-center gap-2">
+        <input type="checkbox" id="select-all" class="rounded bg-slate-950 border-slate-700" />
+        <%= t('channels.select_all') %>
+      </label>
+      <button type="submit"
+              onclick="return confirm('<%= t('channels.delete_confirm') %>');"
+              class="rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 transition px-3 py-1.5">
+        <%= t('channels.delete_selected') %>
+      </button>
+    </div>
+
+    <div class="grid gap-3">
+      <% channels.forEach(function(ch) { %>
+        <% const acexy = (acexyBaseUrl || '').replace(/\/$/, ''); %>
+        <% const streamUrl = `${acexy}/ace/getstream?id=${ch.acestream_id}`; %>
+        <div class="rounded-xl border border-slate-800 bg-slate-800/60">
+          <div class="p-4 flex items-center gap-4">
+            <input type="checkbox" name="ids" value="<%= ch.id %>" class="channel-checkbox rounded bg-slate-950 border-slate-700 flex-shrink-0" />
+            <img src="<%= ch.logo_url || 'https://placehold.co/64x64/1e293b/94a3b8?text=%20' %>"
+                 class="w-12 h-12 rounded-lg object-cover bg-slate-800 flex-shrink-0" alt="" />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full flex-shrink-0 <%=
+                  ch.status === 'online' ? 'bg-emerald-500' : ch.status === 'offline' ? 'bg-red-500' : 'bg-slate-600'
+                %>" title="<%= ch.status %>"></span>
+                <button type="button" class="font-medium truncate hover:text-indigo-400 transition text-left"
+                        onclick="toggleSchedule(<%= ch.id %>, '<%= ch.tvg_id %>')">
+                  <%= ch.name %>
+                </button>
+                <% if (ch.category) { %>
+                  <span class="text-xs rounded-full bg-slate-800 px-2 py-0.5 text-slate-400"><%= ch.category %></span>
+                <% } %>
+                <% if (ch.tvg_id && tvgIdCounts[ch.tvg_id] > 1) { %>
+                  <span class="text-xs rounded-full bg-indigo-950 text-indigo-300 px-2 py-0.5" title="<%= t('channels.duplicate_hint') %>">
+                    <%= tvgIdCounts[ch.tvg_id] %> <%= t('channels.streams_count') %>
+                  </span>
+                <% } %>
+              </div>
+              <div class="text-xs text-slate-500 truncate"><%= t('channels.id_label') %>: <%= ch.acestream_id %></div>
+              <% const nn = epgByChannel[ch.id]; %>
+              <% if (nn && nn.now) { %>
+                <div class="mt-1 text-sm text-indigo-300 truncate"><%= t('channels.now_playing') %>: <%= nn.now.title %></div>
+              <% } %>
+              <% if (nn && nn.next) { %>
+                <div class="text-xs text-slate-500 truncate"><%= t('channels.up_next') %>: <%= nn.next.title %></div>
+              <% } %>
+              <div class="flex items-center gap-3 mt-2 text-xs">
+                <a href="/watch/<%= ch.id %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
+                <a href="/channels/<%= ch.id %>/vlc.m3u" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
+                <a href="acestream://<%= ch.acestream_id %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.aceplayer') %></a>
+                <button type="button" onclick="copyLink('<%= streamUrl %>', this)" class="text-slate-400 hover:text-indigo-400 transition">
+                  <%= t('channels.copy_link') %>
+                </button>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <button type="submit" formaction="/channels/<%= ch.id %>/check-status" formmethod="POST"
+                      class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                <%= t('channels.verify') %>
+              </button>
+              <button type="button" onclick="toggleTvgSuggest(<%= ch.id %>)"
+                      class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                <%= t('channels.tvg_suggest') %>
+              </button>
+              <a href="/channels/new?duplicate_from=<%= ch.id %>" class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                <%= t('channels.add_alt_stream') %>
+              </a>
+              <a href="/channels/<%= ch.id %>/edit" class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                <%= t('channels.edit') %>
+              </a>
+            </div>
+          </div>
+          <div id="schedule-<%= ch.id %>" class="hidden border-t border-slate-800 px-4 py-3 text-sm"></div>
+          <div id="tvgsuggest-<%= ch.id %>" class="hidden border-t border-slate-800 px-4 py-3 text-sm"></div>
+        </div>
+      <% }); %>
+    </div>
+  </form>
+<% } %>
+
+<script>
+  var i18n = {
+    prevDay: <%- JSON.stringify(t('schedule.prev_day')) %>,
+    nextDay: <%- JSON.stringify(t('schedule.next_day')) %>,
+    noTvgId: <%- JSON.stringify(t('schedule.no_tvg_id')) %>,
+    empty: <%- JSON.stringify(t('schedule.empty')) %>,
+    loading: <%- JSON.stringify(t('schedule.loading')) %>,
+    copied: <%- JSON.stringify(t('channels.copied')) %>,
+    error: <%- JSON.stringify(t('channels.error')) %>,
+    tvgNoSuggestions: <%- JSON.stringify(t('channels.tvg_no_suggestions')) %>,
+    logoSuggestTitle: <%- JSON.stringify(t('channels.logo_suggest_title')) %>,
+    tvgUse: <%- JSON.stringify(t('channels.tvg_use')) %>,
+    manualSearchTitle: <%- JSON.stringify(t('channels.manual_search_title')) %>,
+    manualSearchPlaceholder: <%- JSON.stringify(t('channels.manual_search_placeholder')) %>,
+    manualSearchBtn: <%- JSON.stringify(t('channels.manual_search_btn')) %>,
+    manualSearchEmpty: <%- JSON.stringify(t('channels.manual_search_empty')) %>,
+  };
+
+  document.getElementById('select-all')?.addEventListener('change', function () {
+    document.querySelectorAll('.channel-checkbox').forEach(function (cb) { cb.checked = this.checked; }.bind(this));
+  });
+
+  function copyLink(url, btn) {
+    copyToClipboard(url).then(function () {
+      var original = btn.textContent;
+      btn.textContent = i18n.copied;
+      setTimeout(function () { btn.textContent = original; }, 1500);
+    }).catch(function (err) {
+      console.error('[copy] fallito:', err);
+      alert(url);
+    });
+  }
+
+  function formatTime(ts) {
+    var d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderSchedule(panel, channelId, data) {
+    if (!data.tvgId) {
+      panel.innerHTML = '<p class="text-slate-500">' + i18n.noTvgId + '</p>';
+      return;
+    }
+    var html = '<div class="flex items-center justify-between mb-3">';
+    html += '<button type="button" class="text-indigo-400 hover:text-indigo-300 text-xs" onclick="loadSchedule(' + channelId + ', \'' + data.prevDate + '\')">' + i18n.prevDay + '</button>';
+    html += '<span class="text-slate-300 font-medium">' + data.date + '</span>';
+    html += '<button type="button" class="text-indigo-400 hover:text-indigo-300 text-xs" onclick="loadSchedule(' + channelId + ', \'' + data.nextDate + '\')">' + i18n.nextDay + '</button>';
+    html += '</div>';
+
+    if (!data.programs.length) {
+      html += '<p class="text-slate-500">' + i18n.empty + '</p>';
+    } else {
+      html += '<div class="grid gap-1.5">';
+      data.programs.forEach(function (p) {
+        html += '<div class="flex gap-3">';
+        html += '<span class="text-slate-500 font-mono flex-shrink-0">' + formatTime(p.start) + '–' + formatTime(p.stop) + '</span>';
+        html += '<span class="text-slate-200">' + p.title + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    panel.innerHTML = html;
+  }
+
+  function loadSchedule(channelId, date) {
+    var panel = document.getElementById('schedule-' + channelId);
+    panel.innerHTML = '<p class="text-slate-500">' + i18n.loading + '</p>';
+    fetch('/channels/' + channelId + '/schedule?date=' + date)
+      .then(function (r) { return r.json(); })
+      .then(function (data) { renderSchedule(panel, channelId, data); })
+      .catch(function () { panel.innerHTML = '<p class="text-red-400">' + i18n.error + '</p>'; });
+  }
+
+  function toggleSchedule(channelId) {
+    var panel = document.getElementById('schedule-' + channelId);
+    var isHidden = panel.classList.contains('hidden');
+    document.querySelectorAll('[id^="schedule-"]').forEach(function (p) { p.classList.add('hidden'); });
+    if (isHidden) {
+      panel.classList.remove('hidden');
+      if (!panel.dataset.loaded) {
+        panel.dataset.loaded = '1';
+        loadSchedule(channelId, new Date().toISOString().slice(0, 10));
+      }
+    }
+  }
+
+  function applyTvgSuggestion(channelId, tvgId, logoUrl, btn) {
+    var original = btn.textContent;
+    btn.textContent = '…';
+    btn.disabled = true;
+    var body = new URLSearchParams({ tvg_id: tvgId, logo_url: logoUrl || '' });
+    fetch('/channels/' + channelId + '/tvg-id', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    })
+      .then(function (r) {
+        console.log('[tvg-suggest] risposta:', r.status);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        console.log('[tvg-suggest] applicato:', data);
+        window.location.reload();
+      })
+      .catch(function (err) {
+        console.error('[tvg-suggest] fallito:', err);
+        btn.textContent = original;
+        btn.disabled = false;
+        alert(i18n.error + ': ' + err.message);
+      });
+  }
+
+  function applyLogoSuggestion(channelId, logoUrl, btn) {
+    var original = btn.textContent;
+    btn.textContent = '…';
+    btn.disabled = true;
+    var body = new URLSearchParams({ logo_url: logoUrl });
+    fetch('/channels/' + channelId + '/logo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    })
+      .then(function (r) {
+        console.log('[logo-suggest] risposta:', r.status);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        console.log('[logo-suggest] applicato:', data);
+        window.location.reload();
+      })
+      .catch(function (err) {
+        console.error('[logo-suggest] fallito:', err);
+        btn.textContent = original;
+        btn.disabled = false;
+        alert(i18n.error + ': ' + err.message);
+      });
+  }
+
+  function renderTvgSuggestions(panel, channelId, suggestions, logoSuggestions) {
+    var html = '';
+
+    if (!suggestions.length) {
+      html += '<p class="text-slate-500">' + i18n.tvgNoSuggestions + '</p>';
+    } else {
+      html += '<div class="grid gap-2 mb-4">';
+      suggestions.forEach(function (s) {
+        var tvgId = String(s.tvgId || '');
+        var logoUrl = String(s.logoUrl || '');
+        var displayName = String(s.displayName || tvgId || '?');
+        html += '<div class="flex items-center justify-between gap-3">';
+        html += '<div class="min-w-0 flex items-center gap-2">';
+        if (logoUrl) {
+          html += '<img src="' + logoUrl + '" class="w-6 h-6 rounded object-cover bg-slate-800 flex-shrink-0" alt="" />';
+        }
+        html += '<span class="text-slate-200 truncate">' + displayName + '</span> ';
+        html += '<span class="text-slate-500 font-mono text-xs">(' + tvgId + ')</span> ';
+        html += '<span class="text-slate-600 text-xs">' + Math.round((s.score || 0) * 100) + '%</span></div>';
+        html += '<button type="button" class="tvg-suggest-use text-xs text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded border border-slate-800 flex-shrink-0" ' +
+                'data-tvgid="' + tvgId.replace(/"/g, '&quot;') + '" data-logo="' + logoUrl.replace(/"/g, '&quot;') + '">' + i18n.tvgUse + '</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (logoSuggestions && logoSuggestions.length) {
+      html += '<p class="text-xs text-slate-500 mb-2">' + i18n.logoSuggestTitle + '</p>';
+      html += '<div class="flex flex-wrap gap-3">';
+      logoSuggestions.forEach(function (l) {
+        var icon = String(l.icon || '');
+        var name = String(l.name || '');
+        if (!icon) return;
+        html += '<div class="flex flex-col items-center gap-1">';
+        html += '<img src="' + icon + '" class="w-10 h-10 rounded object-cover bg-slate-800" alt="" title="' + name.replace(/"/g, '&quot;') + '" />';
+        html += '<button type="button" class="logo-suggest-use text-xs text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded border border-slate-800" ' +
+                'data-logo="' + icon.replace(/"/g, '&quot;') + '">' + i18n.tvgUse + '</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (!html) html = '<p class="text-slate-500">' + i18n.tvgNoSuggestions + '</p>';
+
+    html += '<div class="mt-4 pt-3 border-t border-slate-800">';
+    html += '<p class="text-xs text-slate-500 mb-2">' + i18n.manualSearchTitle + '</p>';
+    html += '<div class="flex gap-2 mb-2">';
+    html += '<input type="text" class="manual-epg-search flex-1 rounded-lg bg-slate-950 border border-slate-800 px-2 py-1 text-xs focus:outline-none focus:border-indigo-500" placeholder="' + i18n.manualSearchPlaceholder + '" />';
+    html += '<button type="button" class="manual-epg-search-btn text-xs text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded border border-slate-800">' + i18n.manualSearchBtn + '</button>';
+    html += '</div>';
+    html += '<div class="manual-epg-results grid gap-1"></div>';
+    html += '</div>';
+
+    panel.innerHTML = html;
+
+    panel.querySelectorAll('.tvg-suggest-use').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyTvgSuggestion(channelId, btn.dataset.tvgid, btn.dataset.logo, btn);
+      });
+    });
+    panel.querySelectorAll('.logo-suggest-use').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyLogoSuggestion(channelId, btn.dataset.logo, btn);
+      });
+    });
+
+    var searchInput = panel.querySelector('.manual-epg-search');
+    var searchBtn = panel.querySelector('.manual-epg-search-btn');
+    var resultsBox = panel.querySelector('.manual-epg-results');
+
+    function runManualSearch() {
+      var q = searchInput.value.trim();
+      if (!q) return;
+      resultsBox.innerHTML = '<p class="text-slate-500 text-xs">' + i18n.loading + '</p>';
+      fetch('/epg-channels/search?q=' + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var results = data.results || [];
+          if (!results.length) {
+            resultsBox.innerHTML = '<p class="text-slate-500 text-xs">' + i18n.manualSearchEmpty + '</p>';
+            return;
+          }
+          var html = '';
+          results.forEach(function (r) {
+            html += '<div class="flex items-center justify-between gap-2 text-xs">';
+            html += '<div class="min-w-0 flex items-center gap-2">';
+            if (r.logoUrl) html += '<img src="' + r.logoUrl + '" class="w-5 h-5 rounded object-cover bg-slate-800 flex-shrink-0" alt="" />';
+            html += '<span class="text-slate-200 truncate">' + r.displayName + '</span>';
+            html += '<span class="text-slate-600 font-mono">(' + r.tvgId + ')</span></div>';
+            html += '<button type="button" class="manual-epg-use text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded border border-slate-800 flex-shrink-0" ' +
+                    'data-tvgid="' + r.tvgId.replace(/"/g, '&quot;') + '" data-logo="' + (r.logoUrl || '').replace(/"/g, '&quot;') + '">' + i18n.tvgUse + '</button>';
+            html += '</div>';
+          });
+          resultsBox.innerHTML = html;
+          resultsBox.querySelectorAll('.manual-epg-use').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              applyTvgSuggestion(channelId, btn.dataset.tvgid, btn.dataset.logo, btn);
+            });
+          });
+        })
+        .catch(function () {
+          resultsBox.innerHTML = '<p class="text-red-400 text-xs">' + i18n.error + '</p>';
+        });
+    }
+
+    if (searchBtn) searchBtn.addEventListener('click', runManualSearch);
+    if (searchInput) {
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); runManualSearch(); }
+      });
+    }
+  }
+
+  function toggleTvgSuggest(channelId) {
+    var panel = document.getElementById('tvgsuggest-' + channelId);
+    var isHidden = panel.classList.contains('hidden');
+    document.querySelectorAll('[id^="tvgsuggest-"]').forEach(function (p) { p.classList.add('hidden'); });
+    if (isHidden) {
+      panel.classList.remove('hidden');
+      panel.innerHTML = '<p class="text-slate-500">' + i18n.loading + '</p>';
+      fetch('/channels/' + channelId + '/tvg-suggestions')
+        .then(function (r) { return r.json(); })
+        .then(function (data) { renderTvgSuggestions(panel, channelId, data.suggestions || [], data.logoSuggestions || []); })
+        .catch(function () { panel.innerHTML = '<p class="text-red-400">' + i18n.error + '</p>'; });
+    }
+  }
+</script>

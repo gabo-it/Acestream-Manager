@@ -1,0 +1,70 @@
+<h1 class="text-2xl font-bold mb-2"><%= t('playlist.title') %></h1>
+<p class="text-sm text-slate-400 mb-6"><%= t('playlist.subtitle') %></p>
+
+<div class="grid gap-6 max-w-2xl">
+
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+    <h2 class="font-semibold mb-1"><%= t('playlist.ts_title') %></h2>
+    <p class="text-xs text-slate-500 mb-4"><%= t('playlist.ts_desc') %></p>
+    <div class="flex gap-2">
+      <input readonly value="<%= tsUrl %>"
+             class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono text-slate-300" />
+      <button type="button" onclick="copyPlaylistLink('<%= tsUrl %>', this)"
+              class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm flex-shrink-0">
+        <%= t('channels.copy_link') %>
+      </button>
+      <a href="<%= tsUrl %>" target="_blank" rel="noopener"
+         class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium flex-shrink-0">
+        <%= t('playlist.open') %>
+      </a>
+    </div>
+    <p class="text-xs text-slate-500 mt-2">
+      <%= t('playlist.via') %>: <code class="text-slate-400"><%= acexyBaseUrl %></code>
+      (<a href="/settings" class="text-indigo-400 underline"><%= t('nav.settings') %></a>)
+    </p>
+  </div>
+
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+    <h2 class="font-semibold mb-1"><%= t('playlist.hls_title') %></h2>
+    <p class="text-xs text-slate-500 mb-4"><%= t('playlist.hls_desc') %></p>
+
+    <% if (!hlsConfigured) { %>
+      <div class="rounded-lg border border-amber-900 bg-amber-950/30 text-amber-300 px-4 py-3 text-sm">
+        <%= t('playlist.hls_not_configured') %>
+        <a href="/settings" class="underline"><%= t('nav.settings') %></a>.
+      </div>
+    <% } else { %>
+      <div class="flex gap-2">
+        <input readonly value="<%= hlsUrl %>"
+               class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono text-slate-300" />
+        <button type="button" onclick="copyPlaylistLink('<%= hlsUrl %>', this)"
+                class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm flex-shrink-0">
+          <%= t('channels.copy_link') %>
+        </button>
+        <a href="<%= hlsUrl %>" target="_blank" rel="noopener"
+           class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium flex-shrink-0">
+          <%= t('playlist.open') %>
+        </a>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">
+        <%= t('playlist.via') %>: <code class="text-slate-400"><%= enginePublicUrl %></code>
+        (<a href="/settings" class="text-indigo-400 underline"><%= t('nav.settings') %></a>)
+      </p>
+    <% } %>
+    <p class="text-xs text-amber-400 mt-3"><%= t('playlist.hls_experimental') %></p>
+  </div>
+
+</div>
+
+<script>
+  function copyPlaylistLink(url, btn) {
+    copyToClipboard(url).then(function () {
+      var original = btn.textContent;
+      btn.textContent = <%- JSON.stringify(t('channels.copied')) %>;
+      setTimeout(function () { btn.textContent = original; }, 1500);
+    }).catch(function (err) {
+      console.error('[copy] fallito:', err);
+      alert(url);
+    });
+  }
+</script>

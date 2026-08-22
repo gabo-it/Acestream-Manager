@@ -1,0 +1,24 @@
+<a href="/football" class="text-sm text-indigo-400 hover:text-indigo-300 underline mb-4 inline-block">
+  ← <%= t('football.back_to_search') %>
+</a>
+
+<h1 class="text-2xl font-bold mb-6"><%= t('football.matches_title') %></h1>
+
+<% if (error) { %>
+  <div class="rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm mb-6">
+    <%= t('football.search_failed') %>: <%= error %>
+  </div>
+<% } else if (matches.length === 0) { %>
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400">
+    <%= t('football.no_matches') %>
+  </div>
+<% } else { %>
+  <div class="grid gap-2">
+    <% matches.forEach(function(m) { %>
+      <a href="/football/match?url=<%= encodeURIComponent(m.url) %>"
+         class="rounded-xl border border-slate-800 bg-slate-800/60 p-4 hover:border-indigo-500 transition block">
+        <%= m.title %>
+      </a>
+    <% }); %>
+  </div>
+<% } %>

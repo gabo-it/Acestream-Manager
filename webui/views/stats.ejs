@@ -1,0 +1,125 @@
+<h1 class="text-2xl font-bold mb-2"><%= t('stats.title') %></h1>
+<p class="text-sm text-slate-400 mb-6"><%= t('stats.subtitle') %></p>
+
+<div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4 mb-6 max-w-xl">
+  <div class="text-xs text-slate-500 mb-2">
+    <%= t('stats.current_engine') %>: <span class="font-mono text-slate-300"><%= statsEngineUrl %></span>
+    <% if (isDefaultEngine) { %>
+      <span class="text-slate-600">(<%= t('stats.default_engine') %>)</span>
+    <% } %>
+  </div>
+  <form method="POST" action="/stats/engine" class="flex gap-2">
+    <input type="hidden" name="channel" value="<%= selectedId %>" />
+    <input type="text" name="engine_url" placeholder="http://acestream:6677 (<%= t('stats.leave_empty') %>)"
+           class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500" />
+    <button class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+      <%= t('stats.use_engine') %>
+    </button>
+  </form>
+</div>
+
+<form method="GET" action="/stats" class="flex gap-2 mb-6 max-w-xl">
+  <select name="channel" onchange="this.form.submit()"
+          class="flex-1 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+    <option value=""><%= t('stats.select_channel') %></option>
+    <% channels.forEach(function(ch) { %>
+      <option value="<%= ch.id %>" <%= String(selectedId) === String(ch.id) ? 'selected' : '' %>><%= ch.name %></option>
+    <% }); %>
+  </select>
+</form>
+
+<% if (selectedChannel) { %>
+  <div class="rounded-lg border border-amber-900 bg-amber-950/30 text-amber-300 px-4 py-3 text-sm mb-6">
+    <%= t('stats.bandwidth_warning') %>
+  </div>
+
+  <div id="stats-panel" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4">
+      <div class="text-xs text-slate-500"><%= t('stats.status') %></div>
+      <div id="stat-status" class="text-lg font-semibold mt-1">—</div>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4">
+      <div class="text-xs text-slate-500"><%= t('stats.peers') %></div>
+      <div id="stat-peers" class="text-lg font-semibold mt-1">—</div>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4">
+      <div class="text-xs text-slate-500"><%= t('stats.download_speed') %></div>
+      <div id="stat-down" class="text-lg font-semibold mt-1 text-emerald-400">—</div>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4">
+      <div class="text-xs text-slate-500"><%= t('stats.upload_speed') %></div>
+      <div id="stat-up" class="text-lg font-semibold mt-1 text-indigo-400">—</div>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4">
+      <div class="text-xs text-slate-500"><%= t('stats.downloaded') %></div>
+      <div id="stat-downloaded" class="text-lg font-semibold mt-1">—</div>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4">
+      <div class="text-xs text-slate-500"><%= t('stats.uploaded') %></div>
+      <div id="stat-uploaded" class="text-lg font-semibold mt-1">—</div>
+    </div>
+  </div>
+
+  <p id="stats-error" class="hidden text-sm text-red-400 mb-4"></p>
+
+  <button onclick="stopStats()" class="rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 transition px-4 py-2 text-sm">
+    <%= t('stats.stop') %>
+  </button>
+
+  <script>
+    var channelId = <%= selectedChannel.id %>;
+    var i18n = {
+      prebuf: <%- JSON.stringify(t('stats.status_prebuf')) %>,
+      dl: <%- JSON.stringify(t('stats.status_dl')) %>,
+      error: <%- JSON.stringify(t('stats.fetch_error')) %>,
+    };
+    var pollTimer = null;
+
+    function formatSpeed(kbs) {
+      if (kbs >= 1024) return (kbs / 1024).toFixed(2) + ' MB/s';
+      return kbs.toFixed(0) + ' KB/s';
+    }
+
+    function formatBytes(bytes) {
+      if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+      if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      return (bytes / 1024).toFixed(0) + ' KB';
+    }
+
+    function poll() {
+      fetch('/channels/' + channelId + '/stats')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) {
+            document.getElementById('stats-error').textContent = i18n.error + ': ' + data.error;
+            document.getElementById('stats-error').classList.remove('hidden');
+            return;
+          }
+          document.getElementById('stats-error').classList.add('hidden');
+          document.getElementById('stat-status').textContent = data.status === 'dl' ? i18n.dl : data.status === 'prebuf' ? i18n.prebuf : data.status;
+          document.getElementById('stat-peers').textContent = data.peers;
+          document.getElementById('stat-down').textContent = formatSpeed(data.speed_down || 0);
+          document.getElementById('stat-up').textContent = formatSpeed(data.speed_up || 0);
+          document.getElementById('stat-downloaded').textContent = formatBytes(data.downloaded || 0);
+          document.getElementById('stat-uploaded').textContent = formatBytes(data.uploaded || 0);
+        })
+        .catch(function () {
+          document.getElementById('stats-error').textContent = i18n.error;
+          document.getElementById('stats-error').classList.remove('hidden');
+        });
+    }
+
+    function stopStats() {
+      clearInterval(pollTimer);
+      fetch('/channels/' + channelId + '/stats/stop', { method: 'POST' }).finally(function () {
+        window.location.href = '/stats';
+      });
+    }
+
+    poll();
+    pollTimer = setInterval(poll, 3000);
+    window.addEventListener('beforeunload', function () {
+      navigator.sendBeacon('/channels/' + channelId + '/stats/stop');
+    });
+  </script>
+<% } %>

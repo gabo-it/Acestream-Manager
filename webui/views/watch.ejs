@@ -1,0 +1,183 @@
+<div class="max-w-3xl mx-auto">
+  <h1 class="text-xl font-bold mb-4"><%= channel.name %></h1>
+
+  <div class="rounded-lg border border-amber-900 bg-amber-950/30 text-amber-300 px-4 py-3 text-sm mb-4">
+    <%= t('watch.browser_compat_banner') %>
+  </div>
+
+  <div class="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video">
+    <video id="player" controls class="w-full h-full"></video>
+  </div>
+
+  <p id="player-status" class="text-xs text-slate-500 mt-2"></p>
+
+  <p id="player-error" class="hidden mt-4 rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm">
+    <span id="player-error-detail"></span><br />
+    <%= t('watch.fallback_before') %>
+    <a href="<%= streamUrl %>" class="underline"><%= t('watch.open_direct') %></a>
+    <%= t('watch.fallback_after') %>
+    <br /><span class="text-xs text-red-400"><%= t('watch.codec_hint') %></span>
+    <br /><span class="text-xs text-amber-400"><%= t('watch.chromium_hint') %></span>
+  </p>
+
+  <p class="text-xs text-slate-500 mt-3 font-mono break-all"><%= t('watch.direct_link_label') %>: <%= streamUrl %></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
+<script>
+  (function () {
+    // Solo MPEG-TS via acexy: infrastruttura collaudata (usata anche dalle
+    // playlist).
+    var tsUrl = <%- JSON.stringify(tsProxyUrl) %>;
+    var video = document.getElementById('player');
+    var errorBox = document.getElementById('player-error');
+    var errorDetail = document.getElementById('player-error-detail');
+    var statusEl = document.getElementById('player-status');
+    var player = null;
+    var retryCount = 0;
+    var MAX_RETRIES = 3;
+    var handlingError = false;
+    var finished = false;
+    var destroyToken = 0; // vedi destroyPlayer(): invalida i riferimenti in volo
+    var triedNoAudio = false;
+    var pendingRetry = null; // { fn, delay } — un retry rimandato mentre la scheda è in background
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    // Se la scheda va in background, Chrome può mettere in pausa un video
+    // senza audio per risparmiare energia ("video-only background media was
+    // paused to save power"). Trattarlo come un errore da ritentare crea un
+    // loop di retry mentre l'utente non sta nemmeno guardando la pagina,
+    // che può arrivare a saturare le connessioni verso il nostro stesso
+    // proxy. Quando la scheda è nascosta, i retry vengono sospesi e ripresi
+    // solo al ritorno in primo piano.
+    function scheduleRetry(fn, delay) {
+      if (document.hidden) {
+        pendingRetry = { fn: fn, delay: delay };
+        return;
+      }
+      setTimeout(fn, delay);
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && pendingRetry) {
+        var r = pendingRetry;
+        pendingRetry = null;
+        setTimeout(r.fn, r.delay);
+      }
+    });
+
+    function showError(detail) {
+      finished = true;
+      destroyPlayer();
+      if (detail) errorDetail.textContent = detail;
+      errorBox.classList.remove('hidden');
+      console.error('[watch] Riproduzione fallita:', detail || '(nessun dettaglio)');
+    }
+
+    function destroyPlayer() {
+      destroyToken += 1; // qualunque callback async legata al player precedente si autoriconosce "stale"
+      var p = player;
+      player = null;
+      if (p) {
+        // player.destroy() può avere lavoro asincrono interno in corso
+        // (letture di rete, callback di appendBuffer già in coda): se
+        // resettiamo il <video> nello stesso istante, quel lavoro può
+        // ancora tentare di usare riferimenti che stiamo azzerando,
+        // causando "Cannot read properties of null (reading 'emit')".
+        // defer di un tick per lasciarlo assestare prima del reset.
+        try { p.destroy(); } catch (e) { /* ignora */ }
+      }
+      setTimeout(function () {
+        try {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        } catch (e) { /* ignora */ }
+      }, 0);
+    }
+
+    function startPlayer() {
+      if (typeof mpegts === 'undefined') {
+        showError('mpegts.js non caricato.');
+        return;
+      }
+      if (!mpegts.getFeatureList().mseLivePlayback) {
+        showError('Questo browser non supporta MediaSource Extensions per lo streaming live.');
+        return;
+      }
+      handlingError = false;
+      var myToken = destroyToken;
+      var config = { type: 'mse', isLive: true, url: tsUrl };
+      if (triedNoAudio) config.hasAudio = false;
+      player = mpegts.createPlayer(config);
+      player.attachMediaElement(video);
+      player.load();
+      player.on(mpegts.Events.ERROR, function (type, detail) {
+        if (myToken !== destroyToken) return; // player già sostituito, ignora
+        if (finished || handlingError) return;
+        handlingError = true;
+
+        // "NetworkError" (connessione lenta/instabile) e "MediaError" dopo
+        // che la riproduzione era già partita (blocco dati transitorio, non
+        // necessariamente un codec incompatibile) vengono ritentati
+        // automaticamente qualche volta prima di mostrare l'errore finale.
+        var isRetryable = type === 'NetworkError' || type === 'MediaError';
+        if (isRetryable && retryCount < MAX_RETRIES) {
+          retryCount += 1;
+          setStatus(<%- JSON.stringify(t('watch.retrying')) %> + ' (' + retryCount + '/' + MAX_RETRIES + ')');
+          destroyPlayer();
+          scheduleRetry(startPlayer, 1500);
+          return;
+        }
+        // Esauriti i retry normali: se non l'abbiamo ancora fatto, tentiamo
+        // una volta sola SENZA audio. Alcuni flussi hanno una traccia audio
+        // in un formato che mpegts.js non sa demuxare (es. AC-3/Dolby
+        // Digital, segnalato nel PMT come "dati privati" generici): il
+        // player si blocca subito dopo il primo frame video proprio a
+        // causa di quella traccia. Se il problema è quello, escludere
+        // l'audio sblocca almeno il video (senza sonoro).
+        if (type === 'MediaError' && !triedNoAudio) {
+          triedNoAudio = true;
+          setStatus(<%- JSON.stringify(t('watch.trying_no_audio')) %>);
+          destroyPlayer();
+          scheduleRetry(startPlayer, 1000);
+          return;
+        }
+        showError(String(type) + (detail ? ' — ' + detail : ''));
+      });
+      setStatus(<%- JSON.stringify(t('watch.click_to_play')) %>);
+      video.play().then(function () {
+        if (triedNoAudio) setStatus(<%- JSON.stringify(t('watch.playing_no_audio')) %>);
+      }).catch(function (err) {
+        // Il blocco autoplay del browser (nessuna interazione dell'utente
+        // ancora) non è un errore di riproduzione: il player è pronto,
+        // serve solo un click sui controlli. Non conta come retry/errore.
+        if (err && err.name === 'NotAllowedError') {
+          setStatus(<%- JSON.stringify(t('watch.click_to_play')) %>);
+        } else {
+          console.warn('[watch] play() fallito:', err && err.message);
+        }
+      });
+    }
+
+    // Guardia globale: alcune versioni di mpegts.js possono generare un
+    // rifiuto di promise non gestito nei suoi internals durante un
+    // destroy/reload ravvicinato — lo logghiamo senza far interrompere il
+    // resto della pagina.
+    window.addEventListener('unhandledrejection', function (event) {
+      var msg = event.reason && event.reason.message ? event.reason.message : String(event.reason);
+      if (msg && msg.indexOf('emit') !== -1) {
+        console.warn('[watch] Rifiuto interno mpegts.js ignorato:', msg);
+        event.preventDefault();
+      }
+    });
+
+    setStatus(<%- JSON.stringify(t('watch.trying_ts')) %>);
+    startPlayer();
+
+    window.addEventListener('beforeunload', destroyPlayer);
+  })();
+</script>

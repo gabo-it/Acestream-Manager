@@ -1,0 +1,111 @@
+<h1 class="text-2xl font-bold mb-2"><%= t('engine.title') %></h1>
+<p class="text-sm text-slate-400 mb-6">
+  <%= t('engine.readonly_note') %>
+</p>
+
+<% if (envIsDirectory) { %>
+  <div class="rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm mb-6">
+    <p class="font-medium mb-2"><%= t('engine.env_dir_title') %></p>
+    <p class="mb-2"><%= t('engine.env_dir_body') %></p>
+    <pre class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs overflow-x-auto">docker compose down
+rm -rf ./.env
+cp .env.example .env
+docker compose up -d</pre>
+  </div>
+<% } %>
+
+<div class="max-w-2xl rounded-xl border border-slate-800 bg-slate-800/60 p-6 mb-6">
+  <h2 class="font-semibold mb-2"><%= t('engine.status_title') %></h2>
+  <% if (engineStatus.ok) { %>
+    <p class="text-sm text-emerald-400">✓ <%= t('engine.status_ok') %> — v<%= engineStatus.version %></p>
+  <% } else { %>
+    <p class="text-sm text-red-400">✗ <%= t('engine.status_error') %>: <%= engineStatus.error %></p>
+  <% } %>
+</div>
+
+<div class="max-w-2xl rounded-xl border border-slate-800 bg-slate-800/60 p-6 mb-6">
+  <h2 class="font-semibold mb-3"><%= t('engine.current_params_title') %></h2>
+  <table class="w-full text-xs">
+    <thead>
+      <tr class="text-left text-slate-500 border-b border-slate-800">
+        <th class="py-1.5 pr-3"><%= t('engine.col_param') %></th>
+        <th class="py-1.5 pr-3">Flag</th>
+        <th class="py-1.5"><%= t('engine.col_value') %></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% paramsAudit.forEach(function(p) { %>
+        <tr class="border-b border-slate-700/60">
+          <td class="py-1.5 pr-3 text-slate-300"><%= p.label %></td>
+          <td class="py-1.5 pr-3 font-mono <%= p.isOfficial ? 'text-slate-400' : 'text-red-400' %>">
+            <%= p.flag %>
+            <% if (!p.isOfficial) { %>
+              <span class="text-red-500" title="<%= t('engine.not_official_tooltip') %>">⚠</span>
+            <% } %>
+          </td>
+          <td class="py-1.5 font-mono text-slate-300"><%= p.value %></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <p class="text-xs text-red-400 mt-3">
+    <%= t('engine.not_official_legend') %>
+  </p>
+
+  <div class="rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-xs font-mono text-slate-400 overflow-x-auto mt-4">
+    <%= effectiveCommand %>
+  </div>
+
+  <p class="text-xs text-slate-500 mt-3">
+    <%= t('engine.edit_hint') %> <code>.env</code>.
+  </p>
+</div>
+
+<div class="max-w-2xl mt-6 rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+  <h2 class="font-semibold mb-1"><%= t('engine.reference_title') %></h2>
+  <p class="text-xs text-slate-500 mb-4">
+    <%= t('engine.reference_subtitle') %>
+    <a href="https://docs.acestream.net/developers/engine-command-line-options/" target="_blank" rel="noopener" class="text-indigo-400 underline">
+      docs.acestream.net
+    </a>.
+  </p>
+
+  <table class="w-full text-xs">
+    <thead>
+      <tr class="text-left text-slate-500 border-b border-slate-800">
+        <th class="py-1.5 pr-3">Flag</th>
+        <th class="py-1.5"><%= t('engine.col_description') %></th>
+      </tr>
+    </thead>
+    <tbody class="text-slate-300">
+      <% [
+        ['--port', 'opt_port'],
+        ['--http-port', 'opt_http_port'],
+        ['--bind-all', 'opt_bind_all'],
+        ['--api-port', 'opt_api_port'],
+        ['--state-dir', 'opt_state_dir'],
+        ['--cache-dir', 'opt_cache_dir'],
+        ['--cache-limit', 'opt_cache_limit'],
+        ['--cache-max-bytes', 'opt_cache_max_bytes'],
+        ['--cache-auto', 'opt_cache_auto'],
+        ['--login / --password', 'opt_login'],
+        ['--access-token', 'opt_access_token'],
+        ['--make-default-access-token', 'opt_make_default_token'],
+        ['--use-internal-buffering', 'opt_internal_buffering'],
+        ['--log-stdout / --log-stderr', 'opt_log_std'],
+        ['--log-file', 'opt_log_file'],
+        ['--log-debug', 'opt_log_debug'],
+      ].forEach(function(row) { %>
+        <tr class="border-b border-slate-700/60">
+          <td class="py-1.5 pr-3 font-mono"><%= row[0] %></td>
+          <td class="py-1.5"><%= t('engine.' + row[1]) %></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <p class="text-xs text-slate-500 mt-4">
+    <%= t('engine.legacy_flags_note') %>
+  </p>
+</div>

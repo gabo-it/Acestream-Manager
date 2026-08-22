@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · AceStream Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+  </style>
+  <script src="/copy.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <nav class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+      <a href="/" class="flex items-center gap-2 font-semibold text-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-indigo-400">
+          <rect x="2" y="7" width="20" height="14" rx="2"></rect>
+          <polyline points="17 2 12 7 7 2"></polyline>
+        </svg>
+        AceStream Manager
+      </a>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="/" class="hover:text-indigo-400 transition"><%= t('nav.channels') %></a>
+        <a href="/sources" class="hover:text-indigo-400 transition"><%= t('nav.sources') %></a>
+        <a href="/search" class="hover:text-indigo-400 transition"><%= t('nav.search') %></a>
+        <a href="/football" class="hover:text-indigo-400 transition"><%= t('nav.football') %></a>
+        <a href="/engine" class="hover:text-indigo-400 transition"><%= t('nav.engine') %></a>
+        <a href="/stats" class="hover:text-indigo-400 transition"><%= t('nav.stats') %></a>
+        <a href="/settings" class="hover:text-indigo-400 transition"><%= t('nav.settings') %></a>
+        <a href="/playlist" class="hover:text-indigo-400 transition"><%= t('nav.playlist') %></a>
+        <a href="/epg.xml" class="hover:text-indigo-400 transition"><%= t('nav.epg') %></a>
+        <span class="flex items-center gap-1 text-xs border-l border-slate-800 pl-3">
+          <a href="/lang/it" class="<%= lang === 'it' ? 'text-indigo-400 font-medium' : 'text-slate-500 hover:text-indigo-400' %>">IT</a>
+          <span class="text-slate-700">|</span>
+          <a href="/lang/en" class="<%= lang === 'en' ? 'text-indigo-400 font-medium' : 'text-slate-500 hover:text-indigo-400' %>">EN</a>
+        </span>
+      </div>
+    </div>
+  </nav>
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    <% if (typeof flash !== 'undefined' && flash) { %>
+      <div class="mb-6 rounded-lg border border-indigo-800 bg-indigo-950/50 text-indigo-200 px-4 py-3 text-sm">
+        <%= flash %>
+      </div>
+    <% } %>
+    <%- body %>
+  </main>
+  <footer class="max-w-6xl mx-auto px-4 py-8 mt-8 border-t border-slate-900 text-center text-xs text-slate-600">
+    <p>
+      AceStream Manager <span class="text-slate-500">v<%= appVersion %></span>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/gabo-it/Acestream-Manager" target="_blank" rel="noopener" class="hover:text-indigo-400 transition">GitHub</a>
+    </p>
+  </footer>
+</body>
+</html>

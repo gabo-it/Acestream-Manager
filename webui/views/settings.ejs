@@ -1,0 +1,42 @@
+<h1 class="text-2xl font-bold mb-6"><%= t('settings.title') %></h1>
+
+<form method="POST" action="/settings" class="max-w-2xl grid gap-6 rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+
+  <div>
+    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.acexy_url_label') %></label>
+    <input name="acexy_base_url" value="<%= acexyBaseUrl %>"
+           class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+    <p class="text-xs text-slate-500 mt-1"><%= t('settings.acexy_url_help') %></p>
+  </div>
+
+  <div>
+    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.engine_public_url_label') %></label>
+    <input name="engine_public_url" value="<%= enginePublicUrl %>" placeholder="http://192.168.1.50:6677"
+           class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+    <p class="text-xs text-slate-500 mt-1"><%= t('settings.engine_public_url_help') %></p>
+  </div>
+
+  <div class="flex gap-3">
+    <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+      <%= t('settings.save') %>
+    </button>
+  </div>
+</form>
+
+<div class="max-w-2xl mt-6 rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+  <h2 class="font-semibold mb-1"><%= t('settings.backup_title') %></h2>
+  <p class="text-xs text-slate-500 mb-4"><%= t('settings.backup_help') %></p>
+  <div class="flex gap-3 items-center flex-wrap">
+    <a href="/settings/export" class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+      <%= t('settings.export') %>
+    </a>
+    <form method="POST" action="/settings/import" enctype="multipart/form-data" class="flex gap-2 items-center"
+          onsubmit="return confirm(<%- JSON.stringify(t('settings.import_confirm')) %>);">
+      <input type="file" name="file" accept="application/json" required
+             class="text-sm text-slate-400 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-slate-200 file:text-sm" />
+      <button class="rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 transition px-4 py-2 text-sm">
+        <%= t('settings.import') %>
+      </button>
+    </form>
+  </div>
+</div>

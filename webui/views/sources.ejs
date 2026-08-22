@@ -1,0 +1,281 @@
+<h1 class="text-2xl font-bold mb-2"><%= t('sources.title') %></h1>
+<p class="text-sm text-slate-400 mb-6">
+  <%= t('sources.subtitle') %>
+  <%= t('sources.zeronet_hint') %>
+</p>
+
+<form method="POST" action="/sources/new" class="flex gap-2 mb-8 max-w-2xl">
+  <input type="url" name="url" required placeholder="https://esempio.com/lista-canali oppure http://127.0.0.1:43110/1Sito.../"
+         class="flex-1 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+  <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+    <%= t('sources.add') %>
+  </button>
+</form>
+
+<% if (sources.length === 0) { %>
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400 mb-8">
+    <%= t('sources.empty') %>
+  </div>
+<% } else { %>
+  <div class="grid gap-3 mb-8">
+    <% sources.forEach(function(s) { %>
+      <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full flex-shrink-0 <%= s.enabled ? 'bg-emerald-500' : 'bg-slate-600' %>"></span>
+              <a href="<%= s.url %>" target="_blank" rel="noopener" class="font-mono text-sm truncate hover:text-indigo-400"><%= s.url %></a>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">
+              <%= s.channel_count %> <%= t('sources.channels_count') %> ·
+              <%= t('sources.last_update') %>: <%= s.last_scraped_at || t('sources.never') %>
+              <% if (s.last_result) { %>
+                <% const sourceFailed = /fallit|errore|error|failed/i.test(s.last_result); %>
+                · <span class="<%= sourceFailed ? 'text-red-400' : '' %>"><%= s.last_result %></span>
+              <% } %>
+            </div>
+            <form method="POST" action="/sources/<%= s.id %>/schedule" class="flex items-center gap-2 mt-2">
+              <label class="text-xs text-slate-500"><%= t('sources.schedule_label') %></label>
+              <select name="auto_refresh_hours" onchange="this.form.submit()"
+                      class="text-xs rounded-lg bg-slate-950 border border-slate-800 px-2 py-1 focus:outline-none focus:border-indigo-500">
+                <option value="" <%= !s.auto_refresh_hours ? 'selected' : '' %>><%= t('sources.schedule_manual') %></option>
+                <option value="1" <%= s.auto_refresh_hours === 1 ? 'selected' : '' %>><%= t('sources.schedule_every') %> 1h</option>
+                <option value="3" <%= s.auto_refresh_hours === 3 ? 'selected' : '' %>><%= t('sources.schedule_every') %> 3h</option>
+                <option value="6" <%= s.auto_refresh_hours === 6 ? 'selected' : '' %>><%= t('sources.schedule_every') %> 6h</option>
+                <option value="12" <%= s.auto_refresh_hours === 12 ? 'selected' : '' %>><%= t('sources.schedule_every') %> 12h</option>
+                <option value="24" <%= s.auto_refresh_hours === 24 ? 'selected' : '' %>><%= t('sources.schedule_every') %> 24h</option>
+              </select>
+              <% if (s.auto_refresh_hours) { %>
+                <span class="text-xs text-emerald-500"><%= t('sources.schedule_auto_note') %></span>
+              <% } %>
+            </form>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button" onclick="openPreview(<%= s.id %>)"
+                    class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+              <%= t('sources.refresh_now') %>
+            </button>
+            <form method="POST" action="/sources/<%= s.id %>/toggle">
+              <button class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                <%= s.enabled ? t('sources.disable') : t('sources.enable') %>
+              </button>
+            </form>
+            <form method="POST" action="/sources/<%= s.id %>/delete" onsubmit="return confirm(<%- JSON.stringify(t('sources.delete_confirm')) %>);">
+              <button class="text-sm text-red-400 hover:text-red-300 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                <%= t('sources.delete') %>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    <% }); %>
+  </div>
+
+  <form method="POST" action="/sources/refresh-all" class="mb-10">
+    <button class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+      <%= t('sources.refresh_all') %>
+    </button>
+    <span class="text-xs text-slate-500 ml-2"><%= t('sources.refresh_all_note') %></span>
+  </form>
+<% } %>
+
+<h2 class="text-xl font-bold mb-4"><%= t('import.title') %></h2>
+
+<div class="grid gap-6 max-w-2xl">
+
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+    <h3 class="font-semibold mb-1"><%= t('import.from_url') %></h3>
+    <p class="text-xs text-slate-500 mb-3">
+      <%= t('import.from_url_help_oneoff') %>
+    </p>
+    <form method="POST" action="/import/url" class="flex gap-2">
+      <input type="url" name="url" required placeholder="https://esempio.com/lista-canali"
+             class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+      <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+        <%= t('import.btn') %>
+      </button>
+    </form>
+  </div>
+
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+    <h3 class="font-semibold mb-1"><%= t('import.paste_m3u') %></h3>
+    <p class="text-xs text-slate-500 mb-3">
+      <%= t('import.paste_m3u_help') %>
+    </p>
+    <form method="POST" action="/import/m3u-text" class="grid gap-3">
+      <textarea name="m3u_text" rows="8" placeholder="#EXTM3U
+#EXTINF:-1 tvg-logo=&quot;...&quot; group-title=&quot;Sport&quot;,Canale 1
+acestream://0123456789abcdef0123456789abcdef01234567"
+                class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500"></textarea>
+      <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium w-fit">
+        <%= t('import.btn') %>
+      </button>
+    </form>
+  </div>
+
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+    <h3 class="font-semibold mb-1"><%= t('import.upload_m3u') %></h3>
+    <p class="text-xs text-slate-500 mb-3"><%= t('import.upload_m3u_help') %></p>
+    <form method="POST" action="/import/m3u-file" enctype="multipart/form-data" class="flex gap-2 items-center">
+      <input type="file" name="file" accept=".m3u,.m3u8,text/plain" required
+             class="flex-1 text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200 file:text-sm" />
+      <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium flex-shrink-0">
+        <%= t('import.btn') %>
+      </button>
+    </form>
+  </div>
+
+</div>
+
+<h2 class="text-xl font-bold mb-4 mt-10"><%= t('sources.epg_title') %></h2>
+
+<form method="POST" action="/sources/epg" class="max-w-2xl grid gap-6 rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+
+  <div>
+    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_urls_label') %></label>
+    <textarea name="epg_urls" rows="3"
+              class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm"><%= epgUrls %></textarea>
+    <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_urls_help') %></p>
+    <% if (epgLastResult) { %>
+      <% const epgFailed = /fallit|errore|error|failed/i.test(epgLastResult); %>
+      <p class="text-xs mt-2 rounded-lg border <%= epgFailed ? 'border-red-900 bg-red-950/40 text-red-300' : 'border-slate-800 bg-slate-950 text-slate-400' %> px-3 py-2">
+        <span class="<%= epgFailed ? 'text-red-200' : 'text-slate-300' %>"><%= t('settings.epg_last_update') %></span> <%= epgLastResult %>
+      </p>
+    <% } %>
+  </div>
+
+  <div>
+    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_interval_label') %></label>
+    <input type="number" name="epg_refresh_hours" min="1" max="24" value="<%= epgRefreshHours %>"
+           class="w-32 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+    <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_interval_help') %></p>
+  </div>
+
+  <div>
+    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_language_label') %></label>
+    <select name="epg_language" class="w-56 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500">
+      <option value="" <%= !epgLanguage ? 'selected' : '' %>><%= t('settings.epg_language_original') %></option>
+      <option value="it" <%= epgLanguage === 'it' ? 'selected' : '' %>>Italiano</option>
+      <option value="en" <%= epgLanguage === 'en' ? 'selected' : '' %>>English</option>
+      <option value="fr" <%= epgLanguage === 'fr' ? 'selected' : '' %>>Français</option>
+      <option value="es" <%= epgLanguage === 'es' ? 'selected' : '' %>>Español</option>
+    </select>
+    <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_language_help') %></p>
+  </div>
+
+  <div class="flex gap-3">
+    <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+      <%= t('settings.save') %>
+    </button>
+    <button formaction="/sources/epg/refresh" class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+      <%= t('settings.refresh_epg') %>
+    </button>
+  </div>
+</form>
+
+<!-- Popup di selezione canali trovati -->
+<div id="preview-overlay" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+  <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col">
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+      <h3 class="font-semibold"><%= t('sources.preview_title') %></h3>
+      <button type="button" onclick="closePreview()" class="text-slate-400 hover:text-slate-200">✕</button>
+    </div>
+    <div id="preview-body" class="p-4 overflow-y-auto flex-1">
+      <p class="text-slate-500 text-sm"><%= t('sources.preview_loading') %></p>
+    </div>
+    <div class="p-4 border-t border-slate-800 flex items-center justify-between gap-3">
+      <label class="flex items-center gap-2 text-sm text-slate-400">
+        <input type="checkbox" id="preview-select-all" class="rounded bg-slate-950 border-slate-700" onchange="togglePreviewAll(this)" />
+        <%= t('sources.select_all') %>
+      </label>
+      <div class="flex gap-2">
+        <button type="button" onclick="closePreview()" class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+          <%= t('form.cancel') %>
+        </button>
+        <button type="button" onclick="importPreviewSelected()" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+          <%= t('sources.import_selected') %>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var i18nSources = {
+    noChannels: <%- JSON.stringify(t('sources.preview_empty')) %>,
+    error: <%- JSON.stringify(t('sources.preview_error')) %>,
+    importing: <%- JSON.stringify(t('sources.importing')) %>,
+    imported: <%- JSON.stringify(t('sources.imported')) %>,
+  };
+  var currentSourceId = null;
+  var currentPreviewChannels = [];
+
+  function openPreview(sourceId) {
+    currentSourceId = sourceId;
+    currentPreviewChannels = [];
+    document.getElementById('preview-overlay').classList.remove('hidden');
+    document.getElementById('preview-select-all').checked = false;
+    var body = document.getElementById('preview-body');
+    body.innerHTML = '<p class="text-slate-500 text-sm">' + <%- JSON.stringify(t('sources.preview_loading')) %> + '</p>';
+
+    fetch('/sources/' + sourceId + '/preview')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          body.innerHTML = '<p class="text-red-400 text-sm">' + i18nSources.error + ': ' + data.error + '</p>';
+          return;
+        }
+        currentPreviewChannels = data.channels || [];
+        if (currentPreviewChannels.length === 0) {
+          body.innerHTML = '<p class="text-slate-500 text-sm">' + i18nSources.noChannels + '</p>';
+          return;
+        }
+        var html = '<div class="grid gap-2">';
+        currentPreviewChannels.forEach(function (ch, i) {
+          html += '<label class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 cursor-pointer">';
+          html += '<input type="checkbox" class="preview-checkbox rounded bg-slate-950 border-slate-700" data-index="' + i + '" checked />';
+          html += '<span class="text-sm text-slate-200 truncate flex-1">' + (ch.name || ch.acestream_id) + '</span>';
+          html += '<span class="text-xs text-slate-600 font-mono">' + ch.acestream_id.slice(0, 10) + '…</span>';
+          html += '</label>';
+        });
+        html += '</div>';
+        body.innerHTML = html;
+        document.getElementById('preview-select-all').checked = true;
+      })
+      .catch(function (err) {
+        body.innerHTML = '<p class="text-red-400 text-sm">' + i18nSources.error + ': ' + err.message + '</p>';
+      });
+  }
+
+  function closePreview() {
+    document.getElementById('preview-overlay').classList.add('hidden');
+  }
+
+  function togglePreviewAll(checkbox) {
+    document.querySelectorAll('.preview-checkbox').forEach(function (cb) { cb.checked = checkbox.checked; });
+  }
+
+  function importPreviewSelected() {
+    var selected = [];
+    document.querySelectorAll('.preview-checkbox:checked').forEach(function (cb) {
+      selected.push(currentPreviewChannels[parseInt(cb.dataset.index, 10)]);
+    });
+    if (selected.length === 0) return;
+
+    var body = document.getElementById('preview-body');
+    body.innerHTML = '<p class="text-slate-500 text-sm">' + i18nSources.importing + '</p>';
+
+    fetch('/sources/' + currentSourceId + '/import-selected', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channels: selected }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        window.location.reload();
+      })
+      .catch(function (err) {
+        body.innerHTML = '<p class="text-red-400 text-sm">' + i18nSources.error + ': ' + err.message + '</p>';
+      });
+  }
+</script>

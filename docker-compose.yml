@@ -1,0 +1,111 @@
+services:
+  acestream:
+    # Image built and published by your CI workflow (.github/workflows/build-engine.yml).
+    # Locally you can also run: docker compose build acestream
+    image: ghcr.io/${GITHUB_OWNER:-gabo-it}/acestream-engine:latest
+    build: ./engine
+    container_name: acestream-engine
+    restart: unless-stopped
+    # Engine parameters can be managed from the webui (Engine tab), which
+    # writes them to this project's .env file. After any change, run
+    # "docker compose up -d" to recreate the container with the new values
+    # (a plain restart isn't enough if ports change).
+    environment:
+      HTTP_PORT: "${HTTP_PORT:-6677}"
+      PORT: "${P2P_PORT:-44556}"
+      LIVE_CACHE_TYPE: "${LIVE_CACHE_TYPE:-memory}"
+      UPLOAD_LIMIT: "${UPLOAD_LIMIT:-200}"
+      DOWNLOAD_LIMIT: "${DOWNLOAD_LIMIT:-}"
+      ACCESS_TOKEN: "${ACCESS_TOKEN:-}"
+      EXTRA_ARGS: "${EXTRA_ARGS:-}"
+      BIND_ALL: "${BIND_ALL:-1}"
+    # The HTTP port is now published (needed for the native
+    # /ace/manifest.m3u8 endpoint used by the HLS playlist, see the
+    # Engine/Settings tabs). Recommended: set an ACCESS_TOKEN in the Engine
+    # tab, since this is now reachable from the local network, not just the
+    # internal Docker network.
+    expose:
+      - "${HTTP_PORT:-6677}"
+    ports:
+      - "${HTTP_PORT:-6677}:${HTTP_PORT:-6677}"
+      - "${P2P_PORT:-44556}:${P2P_PORT:-44556}/tcp"
+      - "${P2P_PORT:-44556}:${P2P_PORT:-44556}/udp"
+    networks:
+      - acestream-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -t1 -O- http://127.0.0.1:$${HTTP_PORT}/webui/api/service?method=get_version | grep -q '\"error\": null'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    # LIVE_CACHE_TYPE=memory only covers the actual live buffer. The engine
+    # still writes a small session/state database (torrentstream.sdb) and,
+    # if ever enabled, a disk cache, inside its home dir (~/.ACEStream) —
+    # which by default lives on the container's writable filesystem,
+    # typically backed by disk. Mounting it as tmpfs sends that residual
+    # I/O to RAM too: no caching touches disk anywhere. Resets on every
+    # container restart (fine — it's just P2P session state, not config).
+    tmpfs:
+      - /srv/ace/.ACEStream:size=512m,mode=1777
+
+  acexy:
+    # Deliberately pinned (not :latest): an unexpected upstream update
+    # could change behavior/defaults without warning. To upgrade, change
+    # ACEXY_VERSION in .env after checking the changelog:
+    # https://github.com/Javinator9889/acexy/releases
+    image: ghcr.io/javinator9889/acexy:${ACEXY_VERSION:-0.2.2}
+    container_name: acexy
+    restart: unless-stopped
+    depends_on:
+      acestream:
+        condition: service_healthy
+    environment:
+      ACEXY_HOST: acestream
+      ACEXY_PORT: "${HTTP_PORT:-6677}"
+      ACEXY_LISTEN_ADDR: ":8080"
+      # acexy's default (1s) is too aggressive: if the engine takes more
+      # than a second to find the first peers, the stream fails with
+      # "timeout awaiting response headers" even though it would have
+      # worked given more time.
+      ACEXY_NO_RESPONSE_TIMEOUT: "${ACEXY_NO_RESPONSE_TIMEOUT:-30s}"
+      # Proxy buffer before handing data to the player: helps with
+      # choppy/non-fluid playback compared to hitting the engine directly.
+      # Upstream default: 4.2MiB.
+      ACEXY_BUFFER_SIZE: "${ACEXY_BUFFER_SIZE:-4.2MiB}"
+      # How long with no response from a client before evicting it from the
+      # pool: too aggressive and a brief player hiccup (e.g. VLC buffering)
+      # can cause disconnects/stutter. Upstream default: 5s.
+      ACEXY_CLIENT_EVICTION_TIMEOUT: "${ACEXY_CLIENT_EVICTION_TIMEOUT:-10s}"
+    ports:
+      - "8080:8080"
+    networks:
+      - acestream-net
+
+  webui:
+    image: ghcr.io/${GITHUB_OWNER:-gabo-it}/acestream-webui:latest
+    build: ./webui
+    container_name: acestream-webui
+    restart: unless-stopped
+    depends_on:
+      - acexy
+    environment:
+      PORT: "4000"
+      DB_PATH: /data/acestream.db
+      ENV_FILE_PATH: /config/.env
+      ACESTREAM_HTTP_PORT: "${HTTP_PORT:-6677}"
+    volumes:
+      - webui-data:/data
+      # Lets the webui read/write engine parameters (Engine tab) directly
+      # to this project's .env file.
+      - ./.env:/config/.env
+    ports:
+      - "4000:4000"
+    networks:
+      - acestream-net
+
+networks:
+  acestream-net:
+    driver: bridge
+
+volumes:
+  webui-data:
