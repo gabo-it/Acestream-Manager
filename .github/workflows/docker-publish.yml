@@ -1,4 +1,4 @@
-name: Publish Multi-Container to Docker Hub
+name: Publish Multi-Container & Update Descriptions to Docker Hub
 
 on:
   push:
@@ -23,24 +23,44 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- CONTAINER 1: WEB UI / MANAGER ---
-      - name: Build e Push Container Manager
+      # ==========================================
+      # 1. CONTAINER WEB UI
+      # ==========================================
+      - name: Build e Push Container WebUI
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile  # o il percorso del 1° Dockerfile
+          context: ./webui
+          file: ./webui/Dockerfile
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui:${{ github.sha }}
 
-      # --- CONTAINER 2: ENGINE / SERVICE ---
+      - name: Aggiorna Description Docker Hub per WebUI
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui
+          readme-filepath: ./docker-hub/webui-readme.md
+
+      # ==========================================
+      # 2. CONTAINER ENGINE
+      # ==========================================
       - name: Build e Push Container Engine
         uses: docker/build-push-action@v5
         with:
-          context: ./engine  # cambia con la cartella del 2° container
-          file: ./engine/Dockerfile  # cambia con il percorso del 2° Dockerfile
+          context: ./engine
+          file: ./engine/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_ENGINE_NAME }}/acestream-engine:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine:${{ github.sha }}
+
+      - name: Aggiorna Description Docker Hub per Engine
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine
+          readme-filepath: ./docker-hub/engine-readme.md
