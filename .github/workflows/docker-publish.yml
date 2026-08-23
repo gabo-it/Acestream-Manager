@@ -14,7 +14,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Login a Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -23,20 +23,27 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # ==========================================
-      # 1. CONTAINER WEB UI
-      # ==========================================
-      - name: Build e Push Container WebUI
+      # --- METADATA FOR WEB UI ---
+      - name: Extract metadata (WebUI)
+        id: meta-webui
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+
+      # --- CONTAINER 1: WEB UI ---
+      - name: Build and Push WebUI
         uses: docker/build-push-action@v5
         with:
           context: ./webui
           file: ./webui/Dockerfile
           push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui:${{ github.sha }}
+          tags: ${{ steps.meta-webui.outputs.tags }}
+          labels: ${{ steps.meta-webui.outputs.labels }}
 
-      - name: Aggiorna Description Docker Hub per WebUI
+      - name: Update Docker Hub Description (WebUI)
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -44,20 +51,27 @@ jobs:
           repository: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui
           readme-filepath: ./docker-hub/webui-readme.md
 
-      # ==========================================
-      # 2. CONTAINER ENGINE
-      # ==========================================
-      - name: Build e Push Container Engine
+      # --- METADATA FOR ENGINE ---
+      - name: Extract metadata (Engine)
+        id: meta-engine
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+
+      # --- CONTAINER 2: ENGINE ---
+      - name: Build and Push Engine
         uses: docker/build-push-action@v5
         with:
           context: ./engine
           file: ./engine/Dockerfile
           push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine:${{ github.sha }}
+          tags: ${{ steps.meta-engine.outputs.tags }}
+          labels: ${{ steps.meta-engine.outputs.labels }}
 
-      - name: Aggiorna Description Docker Hub per Engine
+      - name: Update Docker Hub Description (Engine)
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
