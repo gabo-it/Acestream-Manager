@@ -118,23 +118,47 @@ Ports published on the host: engine HTTP `6677` (serves the HLS playlist), engin
 
 ### With Docker Compose (recommended)
 
-This is what the project is built around — it handles the network, healthcheck-based startup order, and volumes for you.
+Pulls the published images — no local build required.
 
 ```bash
 git clone https://github.com/<your-username>/<your-repo>.git acestream-stack
 cd acestream-stack
 cp .env.example .env   # must exist before first startup
 
-docker compose up -d --build
+docker compose up -d
 ```
 
 - Web UI: http://localhost:4000
 - Playlist (TS, recommended): http://localhost:4000/playlist.m3u8
 - EPG XMLTV: http://localhost:4000/epg.xml
 
+### Deploy without cloning (Portainer, or any paste-and-go stack manager)
+
+`docker-compose.yml` at the repo root works as-is for this — paste its contents directly into Portainer's stack editor. Set the environment variables below (all optional — sensible defaults are baked in) either in Portainer's stack env var UI, or in a `.env` file next to the compose file.
+
+| Variable | Default | Description |
+|----------|---------|--------------|
+| `GITHUB_OWNER` | `gabo-it` | Image owner on ghcr.io |
+| `HTTP_PORT` | `6677` | Engine HTTP port (host + container) |
+| `P2P_PORT` | `44556` | Engine P2P port, TCP+UDP (host + container) |
+| `LIVE_CACHE_TYPE` | `memory` | Engine live-stream buffer location |
+| `UPLOAD_LIMIT` | `200` | Engine upload limit (KB/s) |
+| `DOWNLOAD_LIMIT` | *(unlimited)* | Engine download limit (KB/s) |
+| `ACCESS_TOKEN` | *(none)* | Engine access token — set this if the engine port is reachable beyond your LAN |
+| `BIND_ALL` | `1` | Engine binds to all network interfaces |
+| `ACEXY_VERSION` | `0.2.2` | Pinned acexy image tag |
+| `ACEXY_NO_RESPONSE_TIMEOUT` | `30s` | How long acexy waits for the engine's first response |
+| `ACEXY_BUFFER_SIZE` | `4.2MiB` | acexy's buffer before handing data to the player |
+| `ACEXY_CLIENT_EVICTION_TIMEOUT` | `10s` | How long acexy tolerates a silent client |
+| `ACEXY_PORT_EXPOSED` | `8080` | Host port acexy is published on |
+| `WEBUI_PORT_EXPOSED` | `4000` | Host port the web UI is published on |
+
+> [!NOTE]
+> The webui service mounts `./.env` into itself so the **Engine** tab can display current parameters. If deploying via a method that doesn't check out the repo (e.g. Portainer's Web Editor), create an empty `.env` file in the stack's working directory *before* the first start — otherwise Docker creates a directory there instead, which breaks the container.
+
 ### With plain `docker run`
 
-Possible if you'd rather not use Compose, but you lose the automatic "wait for the engine to be healthy before starting acexy" behavior — start them in order and give the engine a few seconds. Build the images first (`docker build -t acestream-engine ./engine` and `docker build -t acestream-webui ./webui`), then:
+Possible if you'd rather not use Compose, but you lose the automatic "wait for the engine to be healthy before starting acexy" behavior — start them in order and give the engine a few seconds.
 
 ```bash
 # 1. Shared network
@@ -147,7 +171,7 @@ docker run -d --name acestream-engine \
   -e UPLOAD_LIMIT=200 -e BIND_ALL=1 \
   -p 6677:6677 -p 44556:44556/tcp -p 44556:44556/udp \
   --tmpfs /srv/ace/.ACEStream:size=512m,mode=1777 \
-  acestream-engine
+  ghcr.io/gabo-it/acestream-engine:latest
 
 # wait ~20-30s for the engine to finish starting up, then:
 
@@ -167,7 +191,7 @@ docker run -d --name acestream-webui \
   -e PORT=4000 -e DB_PATH=/data/acestream.db -e ENV_FILE_PATH=/config/.env -e ACESTREAM_HTTP_PORT=6677 \
   -v webui-data:/data -v "$(pwd)/.env:/config/.env" \
   -p 4000:4000 \
-  acestream-webui
+  ghcr.io/gabo-it/acestream-webui:latest
 ```
 
 **Note**: with `docker run`, if you change a port later you have to `docker rm -f` and re-run each affected container with the new `-p`/`-e` values by hand — Compose does this for you with a single `docker compose up -d`. For anything beyond a quick one-off test, Compose is the path this project actually supports day-to-day.
