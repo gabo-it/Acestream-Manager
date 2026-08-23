@@ -3,13 +3,11 @@
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![Node.js](https://img.shields.io/badge/node.js-webui-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/self--hosted-gray)]()
-[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/build-engine.yml)
+[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/docker-build.yml)
 
-Self-hosted, self-maintained Docker stack for AceStream — full control over your own streaming setup, no third-party servers involved. A CI-rebuilt engine, a multi-client proxy so more than one viewer can watch at once, and a web app on top that handles the tedious parts: smart channel/EPG matching that works even across alphabets (Cyrillic, Arabic, Chinese…), dual TS/HLS playlists, AceStream search with bulk import, and a live, read-only dashboard of what the engine is actually doing.
+Self-hosted, self-maintained Docker stack for AceStream — full control over your own streaming setup, no third-party servers involved: **multi-client streaming** via a CI-rebuilt engine and proxy, **smart channel/EPG matching** that works even across alphabets, **dual TS/HLS playlists**, **AceStream search with bulk import**, and a **live read-only engine dashboard** — all from one web app.
 
-**Canonical repository:** [gabo-it/Acestream-Manager](https://github.com/gabo-it/Acestream-Manager) — feel free to fork and run your own instance; the instructions below use `<your-username>/<your-repo>` as a placeholder wherever it matters.
-
-Found a bug or have a suggestion? [Open an issue](https://github.com/gabo-it/Acestream-Manager/issues) — feedback is welcome.
+Found a bug? [Open an issue](https://github.com/gabo-it/Acestream-Manager/issues). Have a suggestion or question? [Start a discussion](https://github.com/gabo-it/Acestream-Manager/discussions).
 
 ## 💜 Donations
 
@@ -116,45 +114,91 @@ Ports published on the host: engine HTTP `6677` (serves the HLS playlist), engin
 
 ## 🚀 Quick start
 
-### With Docker Compose (recommended)
+### Docker Compose (recommended)
 
-Pulls the published images — no local build required.
+Create a `docker-compose.yml` with the content below, adjust any values directly in it (ports, engine limits, acexy tuning — everything is right here, no separate `.env` file needed), then run `docker compose up -d`. Works whether you clone the repo or just paste this into a Portainer stack.
 
-```bash
-git clone https://github.com/<your-username>/<your-repo>.git acestream-stack
-cd acestream-stack
-cp .env.example .env   # must exist before first startup
+```yaml
+services:
+  acestream:
+    image: ghcr.io/gabo-it/acestream-engine:latest
+    container_name: acestream-engine
+    restart: unless-stopped
+    environment:
+      HTTP_PORT: "6677"
+      PORT: "44556"
+      LIVE_CACHE_TYPE: memory
+      UPLOAD_LIMIT: "200"       # KB/s, engine upload limit
+      DOWNLOAD_LIMIT: ""        # KB/s, empty = unlimited
+      ACCESS_TOKEN: ""          # set this if this port is reachable beyond your LAN
+      BIND_ALL: "1"
+    expose:
+      - "6677"
+    ports:
+      - "6677:6677"
+      - "44556:44556/tcp"
+      - "44556:44556/udp"
+    networks:
+      - acestream-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -t1 -O- http://127.0.0.1:6677/webui/api/service?method=get_version | grep -q '\"error\": null'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    tmpfs:
+      - /srv/ace/.ACEStream:size=512m,mode=1777   # keeps all engine caching in RAM
 
-docker compose up -d
+  acexy:
+    image: ghcr.io/javinator9889/acexy:0.2.2
+    container_name: acexy
+    restart: unless-stopped
+    depends_on:
+      acestream:
+        condition: service_healthy
+    environment:
+      ACEXY_HOST: acestream
+      ACEXY_PORT: "6677"
+      ACEXY_LISTEN_ADDR: ":8080"
+      ACEXY_NO_RESPONSE_TIMEOUT: 30s   # raise if streams fail with "timeout awaiting response headers"
+      ACEXY_BUFFER_SIZE: 4.2MiB        # raise if playback is choppy
+      ACEXY_CLIENT_EVICTION_TIMEOUT: 10s
+    ports:
+      - "8080:8080"
+    networks:
+      - acestream-net
+
+  webui:
+    image: ghcr.io/gabo-it/acestream-webui:latest
+    container_name: acestream-webui
+    restart: unless-stopped
+    depends_on:
+      - acexy
+    environment:
+      PORT: "4000"
+      DB_PATH: /data/acestream.db
+      ACESTREAM_HTTP_PORT: "6677"
+    volumes:
+      - webui-data:/data
+    ports:
+      - "4000:4000"
+    networks:
+      - acestream-net
+
+networks:
+  acestream-net:
+    driver: bridge
+
+volumes:
+  webui-data:
 ```
 
 - Web UI: http://localhost:4000
 - Playlist (TS, recommended): http://localhost:4000/playlist.m3u8
 - EPG XMLTV: http://localhost:4000/epg.xml
 
-### Deploy without cloning (Portainer, or any paste-and-go stack manager)
-
-`docker-compose.yml` at the repo root works as-is for this — paste its contents directly into Portainer's stack editor. Set the environment variables below (all optional — sensible defaults are baked in) either in Portainer's stack env var UI, or in a `.env` file next to the compose file.
-
-| Variable | Default | Description |
-|----------|---------|--------------|
-| `GITHUB_OWNER` | `gabo-it` | Image owner on ghcr.io |
-| `HTTP_PORT` | `6677` | Engine HTTP port (host + container) |
-| `P2P_PORT` | `44556` | Engine P2P port, TCP+UDP (host + container) |
-| `LIVE_CACHE_TYPE` | `memory` | Engine live-stream buffer location |
-| `UPLOAD_LIMIT` | `200` | Engine upload limit (KB/s) |
-| `DOWNLOAD_LIMIT` | *(unlimited)* | Engine download limit (KB/s) |
-| `ACCESS_TOKEN` | *(none)* | Engine access token — set this if the engine port is reachable beyond your LAN |
-| `BIND_ALL` | `1` | Engine binds to all network interfaces |
-| `ACEXY_VERSION` | `0.2.2` | Pinned acexy image tag |
-| `ACEXY_NO_RESPONSE_TIMEOUT` | `30s` | How long acexy waits for the engine's first response |
-| `ACEXY_BUFFER_SIZE` | `4.2MiB` | acexy's buffer before handing data to the player |
-| `ACEXY_CLIENT_EVICTION_TIMEOUT` | `10s` | How long acexy tolerates a silent client |
-| `ACEXY_PORT_EXPOSED` | `8080` | Host port acexy is published on |
-| `WEBUI_PORT_EXPOSED` | `4000` | Host port the web UI is published on |
-
 > [!NOTE]
-> The webui service mounts `./.env` into itself so the **Engine** tab can display current parameters. If deploying via a method that doesn't check out the repo (e.g. Portainer's Web Editor), create an empty `.env` file in the stack's working directory *before* the first start — otherwise Docker creates a directory there instead, which breaks the container.
+> Without a mounted `.env` file, the **Engine** tab shows built-in defaults rather than these exact values (it just can't read them back) — harmless, since you can see and edit them right here in the compose file. If you'd rather have the Engine tab reflect live values, clone the repo instead and follow the "Deploying your own fork" section below — its `docker-compose.yml` reads from a `.env` file both services share.
 
 ### With plain `docker run`
 
@@ -214,18 +258,16 @@ In the web UI, **Settings** has the Acexy/engine public URLs (needed for playbac
 
 ## 🔄 Deploying your own fork
 
+Canonical repository: [gabo-it/Acestream-Manager](https://github.com/gabo-it/Acestream-Manager). To run your own fork with your own published images instead of `gabo-it`'s:
+
 ```bash
-git init
-git add .
-git commit -m "Initial commit"
+git init && git add . && git commit -m "Initial commit"
 git branch -M main
 git remote add origin https://github.com/<your-username>/<your-repo>.git
 git push -u origin main
 ```
 
-Then set `GITHUB_OWNER=<your-username>` in `.env`. Repo Settings → Actions → General → Workflow permissions must be **"Read and write permissions"** for the CI to publish images.
-
-Subsequent updates are just `git add . && git commit -m "..." && git push`. The CI workflow rebuilds and republishes images on every push to `main`, and weekly to pick up new AceStream engine releases. On the server: `docker compose pull && docker compose up -d`.
+Set `GITHUB_OWNER=<your-username>` in `.env`. Repo Settings → Actions → General → Workflow permissions needs **"Read and write permissions"** for the CI to publish images — it then rebuilds on every push to `main`, and weekly for new AceStream engine releases. Update your server with `docker compose pull && docker compose up -d`.
 
 ### About GitHub Releases
 
