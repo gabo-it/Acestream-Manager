@@ -1,0 +1,46 @@
+name: Publish Multi-Container to Docker Hub
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login a Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- CONTAINER 1: WEB UI / MANAGER ---
+      - name: Build e Push Container Manager
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile  # o il percorso del 1° Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui:${{ github.sha }}
+
+      # --- CONTAINER 2: ENGINE / SERVICE ---
+      - name: Build e Push Container Engine
+        uses: docker/build-push-action@v5
+        with:
+          context: ./engine  # cambia con la cartella del 2° container
+          file: ./engine/Dockerfile  # cambia con il percorso del 2° Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_ENGINE_NAME }}/acestream-engine:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine:${{ github.sha }}
