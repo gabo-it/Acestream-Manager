@@ -8,16 +8,15 @@ services:
     restart: unless-stopped
     # All engine parameters below are customizable via environment
     # variables (defaults shown). Set them in Portainer's stack env vars,
-    # or in a .env file next to this compose file.
+    # or in a .env file next to this compose file. Any official engine flag
+    # (https://docs.acestream.net/developers/engine-command-line-options/)
+    # not covered by a dedicated variable can be added directly to
+    # ENGINE_FLAGS — no need to add a new variable per flag.
     environment:
       HTTP_PORT: "${HTTP_PORT:-6677}"
       PORT: "${P2P_PORT:-44556}"
-      LIVE_CACHE_TYPE: "${LIVE_CACHE_TYPE:-memory}"
-      UPLOAD_LIMIT: "${UPLOAD_LIMIT:-200}"
-      DOWNLOAD_LIMIT: "${DOWNLOAD_LIMIT:-}"
       ACCESS_TOKEN: "${ACCESS_TOKEN:-}"
-      EXTRA_ARGS: "${EXTRA_ARGS:-}"
-      BIND_ALL: "${BIND_ALL:-1}"
+      ENGINE_FLAGS: "${ENGINE_FLAGS:---client-console --bind-all --live-cache-type memory}"
     # HTTP port is published (needed for the HLS playlist's native
     # /ace/manifest.m3u8 endpoint). Set ACCESS_TOKEN above if this host is
     # reachable beyond your own network.

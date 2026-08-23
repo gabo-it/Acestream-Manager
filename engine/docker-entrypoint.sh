@@ -1,34 +1,27 @@
 #!/bin/bash
 set -e
 
-ARGS=("--client-console")
+# HTTP_PORT/PORT stay as their own variables (not folded into ENGINE_FLAGS
+# below) because docker-compose's port mapping and other services (acexy,
+# webui) need these exact same values too — not just something buried
+# inside a free-form flag string with no single source of truth.
+ARGS=("--http-port" "${HTTP_PORT:-6677}" "--port" "${PORT:-44556}")
 
-if [ "${BIND_ALL:-1}" = "1" ]; then
-  ARGS+=("--bind-all")
-fi
-
-ARGS+=("--http-port" "${HTTP_PORT:-6677}")
-ARGS+=("--port" "${PORT:-44556}")
-ARGS+=("--live-cache-type" "${LIVE_CACHE_TYPE:-memory}")
-
-if [ -n "${UPLOAD_LIMIT:-}" ]; then
-  ARGS+=("--upload-limit" "${UPLOAD_LIMIT}")
-fi
-
-if [ -n "${DOWNLOAD_LIMIT:-}" ]; then
-  ARGS+=("--download-limit" "${DOWNLOAD_LIMIT}")
-fi
-
+# ACCESS_TOKEN also stays separate, so it's never accidentally included
+# when sharing/pasting ENGINE_FLAGS somewhere for troubleshooting.
 if [ -n "${ACCESS_TOKEN:-}" ]; then
   ARGS+=("--access-token" "${ACCESS_TOKEN}")
 fi
 
-if [ -n "${EXTRA_ARGS:-}" ]; then
-  # EXTRA_ARGS puo' contenere piu' flag separati da spazio, es:
-  # "--log-file /tmp/engine.log --debug 1"
-  read -r -a EXTRA <<< "${EXTRA_ARGS}"
-  ARGS+=("${EXTRA[@]}")
+# Everything else: one free-form string of official engine flags (see
+# https://docs.acestream.net/developers/engine-command-line-options/).
+# Edit ENGINE_FLAGS directly to add, remove, or change any of them —
+# no need for a dedicated variable per flag.
+if [ -n "${ENGINE_FLAGS:-}" ]; then
+  read -r -a FLAGS <<< "${ENGINE_FLAGS}"
+  ARGS+=("${FLAGS[@]}")
 fi
 
-echo "[entrypoint] Avvio AceStream engine con: ${ARGS[*]}"
+echo "[entrypoint] Starting AceStream engine with: ${ARGS[*]}"
 exec /srv/ace/start-engine "${ARGS[@]}"
+

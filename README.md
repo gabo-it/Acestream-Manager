@@ -127,11 +127,11 @@ services:
     environment:
       HTTP_PORT: "6677"
       PORT: "44556"
-      LIVE_CACHE_TYPE: memory
-      UPLOAD_LIMIT: "200"       # KB/s, engine upload limit
-      DOWNLOAD_LIMIT: ""        # KB/s, empty = unlimited
       ACCESS_TOKEN: ""          # set this if this port is reachable beyond your LAN
-      BIND_ALL: "1"
+      # Everything else the engine supports goes in this one line — add,
+      # remove, or change any official flag directly here. Reference:
+      # https://docs.acestream.net/developers/engine-command-line-options/
+      ENGINE_FLAGS: "--client-console --bind-all --live-cache-type memory"
     expose:
       - "6677"
     ports:
@@ -211,8 +211,8 @@ docker network create acestream-net
 # 2. Engine (adjust HTTP_PORT/PORT to taste — must match what you pass to acexy/webui below)
 docker run -d --name acestream-engine \
   --network acestream-net --restart unless-stopped \
-  -e HTTP_PORT=6677 -e PORT=44556 -e LIVE_CACHE_TYPE=memory \
-  -e UPLOAD_LIMIT=200 -e BIND_ALL=1 \
+  -e HTTP_PORT=6677 -e PORT=44556 \
+  -e ENGINE_FLAGS="--client-console --bind-all --live-cache-type memory" \
   -p 6677:6677 -p 44556:44556/tcp -p 44556:44556/udp \
   --tmpfs /srv/ace/.ACEStream:size=512m,mode=1777 \
   ghcr.io/gabo-it/acestream-engine:latest

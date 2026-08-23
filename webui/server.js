@@ -676,32 +676,23 @@ const OFFICIAL_ENGINE_FLAGS = new Set([
 app.get('/engine', async (req, res) => {
   const params = getEngineParams();
   const effectiveCommand = [
-    'start-engine --client-console',
-    params.bindAll ? '--bind-all' : '',
+    'start-engine',
     `--http-port ${params.httpPort}`,
     `--port ${params.p2pPort}`,
-    `--live-cache-type ${params.liveCacheType}`,
-    params.uploadLimit ? `--upload-limit ${params.uploadLimit}` : '',
-    params.downloadLimit ? `--download-limit ${params.downloadLimit}` : '',
     params.accessToken ? `--access-token ${params.accessToken}` : '',
-    params.extraArgs || '',
+    params.engineFlags || '',
   ]
     .filter(Boolean)
     .join(' ');
 
   // Elenco dei parametri attualmente in uso, con verifica rispetto alla
   // documentazione ufficiale: mostrato in sola lettura nel tab Motore.
-  const extraFlags = (params.extraArgs.match(/--[a-z-]+/g) || []);
+  const flagsFromEngineFlags = (params.engineFlags.match(/--[a-z-]+/g) || []);
   const paramsAudit = [
     { label: 'Porta HTTP', flag: '--http-port', value: params.httpPort },
     { label: 'Porta P2P', flag: '--port', value: params.p2pPort },
-    { label: '--bind-all', flag: '--bind-all', value: params.bindAll ? 'attivo' : 'disattivo' },
-    { label: '--client-console', flag: '--client-console', value: 'sempre attivo' },
-    { label: 'Tipo cache live', flag: '--live-cache-type', value: params.liveCacheType },
-    { label: 'Upload limit', flag: '--upload-limit', value: params.uploadLimit || '(illimitato)' },
-    { label: 'Download limit', flag: '--download-limit', value: params.downloadLimit || '(illimitato)' },
     { label: 'Access token', flag: '--access-token', value: params.accessToken ? '••••••' : '(non impostato)' },
-    ...extraFlags.map((f) => ({ label: 'Flag extra', flag: f, value: '(da EXTRA_ARGS)' })),
+    ...flagsFromEngineFlags.map((f) => ({ label: 'Flag (ENGINE_FLAGS)', flag: f, value: '—' })),
   ].map((p) => ({ ...p, isOfficial: OFFICIAL_ENGINE_FLAGS.has(p.flag) }));
 
   let engineStatus = { ok: false, error: reqT()('errors.not_verified') };
