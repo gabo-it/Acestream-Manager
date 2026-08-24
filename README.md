@@ -338,6 +338,8 @@ This project builds on the work of others — all the actual streaming plumbing 
 - **[AceStream](https://acestream.org/)** — the underlying P2P streaming engine everything here is built around.
 - **[mpegts.js](https://github.com/xqq/mpegts.js)** by [xqq](https://github.com/xqq) — powers the in-browser web player.
 
+Built with the help of [Claude](https://claude.ai) (Anthropic) — used throughout development for debugging, writing code, and documentation.
+
 If any of these projects are useful to you through this one, consider starring their repos too.
 
 ---

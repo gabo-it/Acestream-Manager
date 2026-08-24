@@ -25,7 +25,7 @@
   <rect x="260" y="90" width="500" height="280" rx="14" fill="#1e293b" stroke="#6366f1" stroke-width="2" />
   <text x="510" y="75" text-anchor="middle" fill="#94a3b8" font-size="13" font-weight="600">🖥️ YOUR SERVER</text>
 
-  <!-- acexy (moved up, ahead of webui) -->
+  <!-- acexy (ahead of webui) -->
   <rect x="475" y="100" width="150" height="100" rx="12" fill="#1e293b" stroke="#6366f1" stroke-width="2" />
   <text x="550" y="128" text-anchor="middle" font-size="20">🔀</text>
   <text x="550" y="150" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="700">acexy</text>
@@ -52,26 +52,26 @@
   <text x="830" y="307" text-anchor="middle" font-size="22">🌍</text>
   <text x="830" y="331" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600">P2P peers</text>
 
-  <!-- Arrows -->
-  <!-- Path 1: web player — browser gets the page AND its video bytes proxied through webui -->
+  <!-- Arrows: labels kept clear of the lines themselves, generous offsets -->
+
+  <!-- Path 1: web player, video proxied through webui -->
   <line x1="180" y1="200" x2="285" y2="170" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)" />
-  <text x="185" y="180" fill="#94a3b8" font-size="10">web player</text>
-  <text x="182" y="192" fill="#64748b" font-size="9">(video proxied here)</text>
+  <text x="200" y="155" fill="#94a3b8" font-size="11">web player</text>
 
   <line x1="440" y1="182" x2="470" y2="158" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)" />
-  <text x="415" y="170" fill="#94a3b8" font-size="10">getstream</text>
+  <text x="452" y="140" text-anchor="middle" fill="#94a3b8" font-size="10">getstream</text>
 
-  <!-- Path 2: VLC / M3U — webui only hands out the link/playlist; the actual stream then goes straight to acexy, over the top, bypassing webui entirely -->
-  <path d="M 150 150 C 220 15, 480 15, 548 98" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow-orange)" />
-  <text x="350" y="30" text-anchor="middle" fill="#f59e0b" font-size="11" font-weight="600">VLC / M3U — direct stream (bypasses webui)</text>
+  <!-- Path 2: VLC / M3U streams straight from acexy -->
+  <path d="M 150 150 C 220 10, 480 10, 548 98" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow-orange)" />
+  <text x="350" y="18" text-anchor="middle" fill="#f59e0b" font-size="11" font-weight="600">VLC / M3U — direct stream</text>
 
   <line x1="530" y1="200" x2="470" y2="270" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)" />
-  <text x="500" y="245" fill="#94a3b8" font-size="10">HTTP</text>
+  <text x="545" y="238" fill="#94a3b8" font-size="10">HTTP</text>
 
   <line x1="365" y1="245" x2="410" y2="270" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-dashed)" />
-  <text x="270" y="268" fill="#64748b" font-size="10">search / stats only</text>
+  <text x="220" y="252" fill="#64748b" font-size="10">search / stats</text>
 
   <line x1="532" y1="315" x2="772" y2="315" stroke="#22c55e" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-dashed)" />
-  <text x="600" y="307" fill="#94a3b8" font-size="10">P2P</text>
+  <text x="620" y="332" text-anchor="middle" fill="#94a3b8" font-size="10">P2P</text>
 
 </svg>
