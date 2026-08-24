@@ -1,18 +1,17 @@
 name: Publish Multi-Container & Update Descriptions to Docker Hub
 
 on:
-  # Allows manual triggering from the GitHub Actions tab with an optional version input
+  # Allows manual triggering from the GitHub Actions tab
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to publish (e.g., 1.1.0 or leave empty for latest only)'
+        description: 'Version tag to publish (e.g., 1.2 or 1.2.0). Leave empty for latest only.'
         required: false
         default: ''
-  # Automatically triggers on Git tag pushes matching semver patterns
+  # Automatic trigger on Git tag pushes matching any v* pattern (e.g., v1.0, v1.2.3)
   push:
     tags:
-      - 'v*.*'
-      - 'v*.*.*'
+      - 'v*'
 
 jobs:
   build-and-push:
@@ -38,9 +37,10 @@ jobs:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui
           tags: |
             type=raw,value=latest
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
 
       # --- CONTAINER 1: WEB UI ---
       - name: Build and Push WebUI
@@ -68,9 +68,10 @@ jobs:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine
           tags: |
             type=raw,value=latest
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
 
       # --- CONTAINER 2: ENGINE ---
       - name: Build and Push Engine
