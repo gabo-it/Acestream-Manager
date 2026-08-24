@@ -34,14 +34,14 @@ const APP_VERSION = require('./package.json').version;
 // passare da render(): senza questo, quei messaggi restavano sempre in
 // italiano anche con la lingua impostata su inglese.
 function reqT() {
-  return getTranslator(getSetting('ui_language', 'it'));
+  return getTranslator(getSetting('ui_language', 'en'));
 }
 
 // Piccolo helper per renderizzare le viste dentro il layout comune.
 // Inietta sempre t()/lang così ogni vista può tradurre senza doverli passare a mano.
 // Se locals.titleKey è presente, il <title> del browser viene tradotto di conseguenza.
 function render(res, view, locals = {}) {
-  const lang = getSetting('ui_language', 'it');
+  const lang = getSetting('ui_language', 'en');
   const t = getTranslator(lang);
   const title = locals.titleKey ? t(locals.titleKey) : locals.title;
   const fullLocals = { ...locals, title, t, lang, appVersion: APP_VERSION };

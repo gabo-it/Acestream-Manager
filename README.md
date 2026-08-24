@@ -257,7 +257,7 @@ Set `GITHUB_OWNER=<your-username>` in `.env`, and enable **"Read and write permi
 
 ### About GitHub Releases
 
-Not automatic — this project's CI publishes to GHCR (Packages), not Releases. Create one yourself if you want: `git tag v1.0.0 && git push --tags`, then GitHub → Releases → "Draft a new release". Entirely optional.
+Not automatic — this project's CI publishes to GHCR (Packages), not Releases. Create one yourself if you want: `git tag v1.1 && git push --tags`, then GitHub → Releases → "Draft a new release". Entirely optional.
 
 ### Checking for leaked secrets in your git history
 
@@ -343,7 +343,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v1.1.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v1.2-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>
