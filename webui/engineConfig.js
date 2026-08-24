@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { readEngineStartupCommand, isDockerSocketAvailable } = require('./dockerLogs');
 
 const ENV_PATH = process.env.ENV_FILE_PATH || '/config/.env';
 
@@ -41,6 +42,48 @@ function readEnvFile() {
   return result;
 }
 
+// Estrae httpPort/p2pPort/accessToken/engineFlags da una command line tipo
+// "--http-port 6677 --port 44556 --access-token abc --client-console
+// --bind-all --live-cache-type memory" (esattamente quello che l'entrypoint
+// scrive nei suoi log all'avvio).
+function parseStartupCommand(command) {
+  const tokens = command.split(/\s+/);
+  const params = { httpPort: DEFAULTS.HTTP_PORT, p2pPort: DEFAULTS.P2P_PORT, accessToken: '' };
+  const rest = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === '--http-port' && tokens[i + 1]) {
+      params.httpPort = tokens[++i];
+    } else if (tokens[i] === '--port' && tokens[i + 1]) {
+      params.p2pPort = tokens[++i];
+    } else if (tokens[i] === '--access-token' && tokens[i + 1]) {
+      params.accessToken = tokens[++i];
+    } else if (tokens[i]) {
+      rest.push(tokens[i]);
+    }
+  }
+  params.engineFlags = rest.join(' ');
+  return params;
+}
+
+// Versione per il tab Motore (sola visualizzazione): prova prima a leggere
+// la command line REALE dai log del container engine via Docker socket —
+// la fonte più affidabile, dato che riflette esattamente cosa sta girando
+// ora (funziona anche senza nessun file .env montato, es. deploy
+// auto-contenuto su Portainer). Se il socket non è disponibile o la lettura
+// fallisce, ricade sul file .env montato, poi sui default. Le funzioni
+// usate per scopi funzionali reali (playlist.js, streamProxy.js) restano
+// sulla lettura sincrona di getEngineParams() sotto, per non aggiungere una
+// chiamata al Docker socket ad ogni richiesta.
+async function getEngineParamsForDisplay() {
+  try {
+    const command = await readEngineStartupCommand();
+    if (command) return { ...parseStartupCommand(command), source: 'docker-logs' };
+  } catch {
+    // ricade sul percorso file/default sotto
+  }
+  return { ...getEngineParams(), source: isMountedAsDirectory() || !fs.existsSync(ENV_PATH) ? 'defaults' : 'env-file' };
+}
+
 function getEngineParams() {
   let fileValues = {};
   try {
@@ -76,8 +119,10 @@ function isEnvFileWritable() {
 
 module.exports = {
   getEngineParams,
+  getEngineParamsForDisplay,
   getEngineBaseUrl,
   isEnvFileWritable,
   isMountedAsDirectory,
+  isDockerSocketAvailable,
   ENV_PATH,
 };

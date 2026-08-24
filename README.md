@@ -69,35 +69,7 @@ Italian/English interface · one-click configuration export/import · weekly eng
 
 ## 🏗️ Architecture
 
-```mermaid
-flowchart LR
-    subgraph Client["📱 Your device"]
-        direction TB
-        Browser(["Browser / VLC"])
-    end
-
-    subgraph Server["🖥️ Your server"]
-        direction LR
-        WebUI["🌐 webui :4000\nchannels · EPG · search · football"]
-        Acexy["🔀 acexy :8080\nmultiplexing proxy"]
-        Engine["⚙️ acestream-engine\nHTTP + P2P"]
-    end
-
-    Peers(("🌍 P2P peers"))
-
-    Browser -->|"playlist / player"| WebUI
-    WebUI -->|"getstream"| Acexy
-    Acexy -->|"HTTP"| Engine
-    WebUI -.->|"search / stats only"| Engine
-    Engine <-.->|"P2P"| Peers
-
-    classDef server fill:#1e293b,stroke:#6366f1,stroke-width:2px,color:#e2e8f0
-    classDef client fill:#0f172a,stroke:#64748b,stroke-width:2px,color:#e2e8f0
-    classDef peer fill:#0f172a,stroke:#22c55e,stroke-width:2px,color:#e2e8f0,stroke-dasharray: 5 5
-    class WebUI,Acexy,Engine server
-    class Browser client
-    class Peers peer
-```
+![Architecture diagram](images/architecture.svg)
 
 | Service | Role |
 |---------|------|
@@ -180,6 +152,12 @@ services:
       ACESTREAM_HTTP_PORT: "6677"
     volumes:
       - webui-data:/data
+      # Lets the Engine tab read current parameters straight from the
+      # engine container's own logs — no .env file needed. Grants read
+      # access to the Docker socket (real power over the host); remove
+      # this line if you'd rather not, the tab just falls back to showing
+      # built-in defaults.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "4000:4000"
     networks:
@@ -198,7 +176,16 @@ volumes:
 - EPG XMLTV: http://localhost:4000/epg.xml
 
 > [!NOTE]
-> Without a mounted `.env` file, the **Engine** tab shows built-in defaults rather than these exact values (it just can't read them back) — harmless, since you can see and edit them right here in the compose file. If you'd rather have the Engine tab reflect live values, clone the repo instead and follow the "Deploying your own fork" section below — its `docker-compose.yml` reads from a `.env` file both services share.
+> The Engine tab reads current parameters straight from the engine container's own logs via the mounted Docker socket above — accurate, and no `.env` file needed. If you'd rather not grant socket access, remove that line; the tab then shows built-in defaults instead (harmless — you can still see and edit real values right here in the compose file).
+
+**Prefer to build from source instead of pulling published images?** Cloning the repo gets you its actual `docker-compose.yml`, which keeps `build:` alongside `image:` for exactly this:
+
+```bash
+git clone https://github.com/gabo-it/Acestream-Manager.git acestream-stack
+cd acestream-stack
+cp .env.example .env
+docker compose up -d --build
+```
 
 ### With plain `docker run`
 
@@ -258,20 +245,19 @@ In the web UI, **Settings** has the Acexy/engine public URLs (needed for playbac
 
 ## 🔄 Deploying your own fork
 
-Canonical repository: [gabo-it/Acestream-Manager](https://github.com/gabo-it/Acestream-Manager). To run your own fork with your own published images instead of `gabo-it`'s:
+Canonical repository: [gabo-it/Acestream-Manager](https://github.com/gabo-it/Acestream-Manager).
 
 ```bash
 git init && git add . && git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/<your-username>/<your-repo>.git
+git branch -M main && git remote add origin https://github.com/<your-username>/<your-repo>.git
 git push -u origin main
 ```
 
-Set `GITHUB_OWNER=<your-username>` in `.env`. Repo Settings → Actions → General → Workflow permissions needs **"Read and write permissions"** for the CI to publish images — it then rebuilds on every push to `main`, and weekly for new AceStream engine releases. Update your server with `docker compose pull && docker compose up -d`.
+Set `GITHUB_OWNER=<your-username>` in `.env`, and enable **"Read and write permissions"** under repo Settings → Actions → General → Workflow permissions (needed for the CI to publish images). It then rebuilds on every push to `main` and weekly for new engine releases; update your server with `docker compose pull && docker compose up -d`.
 
 ### About GitHub Releases
 
-The **Releases** tab on GitHub is separate from this — it's not populated automatically. This project's CI publishes container images to GHCR (Packages), not GitHub Releases. If you want tagged releases too (e.g. `v1.0.0`), create them yourself: `git tag v1.0.0 && git push --tags`, then GitHub → Releases → "Draft a new release" and pick that tag. Entirely optional; nothing else in this project depends on it.
+Not automatic — this project's CI publishes to GHCR (Packages), not Releases. Create one yourself if you want: `git tag v1.0.0 && git push --tags`, then GitHub → Releases → "Draft a new release". Entirely optional.
 
 ### Checking for leaked secrets in your git history
 
@@ -357,7 +343,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v1.0.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v1.1.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

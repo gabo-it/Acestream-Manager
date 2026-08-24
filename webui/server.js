@@ -8,7 +8,7 @@ const { buildM3U, buildXmltv } = require('./playlist');
 const { scrapeUrl, importChannels, refreshSource, refreshAllSources, refreshDueSources } = require('./scraper');
 const { parseM3U } = require('./m3u');
 const { checkAndStore, checkAllChannels } = require('./statuscheck');
-const { getEngineParams, getEngineBaseUrl, isEnvFileWritable, isMountedAsDirectory } = require('./engineConfig');
+const { getEngineParams, getEngineParamsForDisplay, getEngineBaseUrl, isEnvFileWritable, isMountedAsDirectory } = require('./engineConfig');
 const { searchAceStream, CATEGORIES } = require('./search');
 const { getTranslator, SUPPORTED_LANGUAGES } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
@@ -674,7 +674,7 @@ const OFFICIAL_ENGINE_FLAGS = new Set([
 ]);
 
 app.get('/engine', async (req, res) => {
-  const params = getEngineParams();
+  const params = await getEngineParamsForDisplay();
   const effectiveCommand = [
     'start-engine',
     `--http-port ${params.httpPort}`,

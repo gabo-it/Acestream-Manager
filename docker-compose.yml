@@ -1,9 +1,11 @@
 services:
   acestream:
-    # Published image — no local build needed, ready for Portainer/plain
-    # `docker compose up -d`. To use Docker Hub instead of GHCR, swap this
-    # for: gaboita/acestream-engine:latest
+    # Both image: and build: are set — "docker compose up -d" uses the
+    # published image as-is; "docker compose up -d --build" builds from
+    # ./engine instead (tags the result with the same name as image:, so
+    # it's used going forward without needing --build again).
     image: ghcr.io/${GITHUB_OWNER:-gabo-it}/acestream-engine:latest
+    build: ./engine
     container_name: acestream-engine
     restart: unless-stopped
     # All engine parameters below are customizable via environment
@@ -70,9 +72,10 @@ services:
       - acestream-net
 
   webui:
-    # Published image — no local build needed. Docker Hub alternative:
-    # gaboita/acestream-webui:latest
+    # Same story as acestream above: image: for pulling as-is, build: for
+    # "docker compose up -d --build" to build from ./webui instead.
     image: ghcr.io/${GITHUB_OWNER:-gabo-it}/acestream-webui:latest
+    build: ./webui
     container_name: acestream-webui
     restart: unless-stopped
     depends_on:
@@ -84,11 +87,13 @@ services:
       ACESTREAM_HTTP_PORT: "${HTTP_PORT:-6677}"
     volumes:
       - webui-data:/data
-      # Lets the Engine tab display current parameters. Needs a real file
-      # (even empty) at ./.env next to this compose file before first
-      # start — Docker otherwise creates a directory there instead, which
-      # breaks the container. If deploying via Portainer's "Web editor"
-      # (no git checkout), create that empty file on the host first.
+      # Lets the Engine tab display current parameters, read straight from
+      # the engine container's own logs (most reliable — reflects exactly
+      # what's running) via the Docker socket, falling back to the .env
+      # file below if the socket isn't available. Remove either line if
+      # you'd rather not grant that access; the tab falls back gracefully
+      # either way, down to built-in defaults as a last resort.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./.env:/config/.env
     ports:
       - "${WEBUI_PORT_EXPOSED:-4000}:4000"

@@ -1,0 +1,67 @@
+<svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6366f1" />
+    </marker>
+    <marker id="arrow-dashed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="900" height="420" fill="#0f172a" rx="12" />
+
+  <!-- Client group -->
+  <rect x="30" y="150" width="150" height="120" rx="14" fill="#0f172a" stroke="#475569" stroke-width="2" />
+  <text x="105" y="140" text-anchor="middle" fill="#94a3b8" font-size="13" font-weight="600">YOUR DEVICE</text>
+  <text x="105" y="205" text-anchor="middle" font-size="26">📱</text>
+  <text x="105" y="235" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600">Browser</text>
+  <text x="105" y="253" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600">/ VLC</text>
+
+  <!-- Server group -->
+  <rect x="260" y="60" width="500" height="300" rx="14" fill="#1e293b" stroke="#6366f1" stroke-width="2" />
+  <text x="510" y="45" text-anchor="middle" fill="#94a3b8" font-size="13" font-weight="600">🖥️ YOUR SERVER</text>
+
+  <!-- webui -->
+  <rect x="290" y="95" width="150" height="110" rx="12" fill="#1e293b" stroke="#6366f1" stroke-width="2" />
+  <text x="365" y="125" text-anchor="middle" font-size="22">🌐</text>
+  <text x="365" y="150" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="700">webui</text>
+  <text x="365" y="167" text-anchor="middle" fill="#94a3b8" font-size="11">:4000</text>
+  <text x="365" y="186" text-anchor="middle" fill="#64748b" font-size="10">channels · EPG</text>
+  <text x="365" y="198" text-anchor="middle" fill="#64748b" font-size="10">search · football</text>
+
+  <!-- acexy -->
+  <rect x="475" y="95" width="150" height="110" rx="12" fill="#1e293b" stroke="#6366f1" stroke-width="2" />
+  <text x="550" y="125" text-anchor="middle" font-size="22">🔀</text>
+  <text x="550" y="150" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="700">acexy</text>
+  <text x="550" y="167" text-anchor="middle" fill="#94a3b8" font-size="11">:8080</text>
+  <text x="550" y="186" text-anchor="middle" fill="#64748b" font-size="10">multiplexing</text>
+  <text x="550" y="198" text-anchor="middle" fill="#64748b" font-size="10">proxy</text>
+
+  <!-- engine -->
+  <rect x="382" y="255" width="150" height="90" rx="12" fill="#1e293b" stroke="#6366f1" stroke-width="2" />
+  <text x="457" y="285" text-anchor="middle" font-size="22">⚙️</text>
+  <text x="457" y="310" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="700">acestream-engine</text>
+  <text x="457" y="328" text-anchor="middle" fill="#64748b" font-size="10">HTTP + P2P</text>
+
+  <!-- Peers -->
+  <circle cx="830" cy="300" r="55" fill="#0f172a" stroke="#22c55e" stroke-width="2" stroke-dasharray="5 4" />
+  <text x="830" y="292" text-anchor="middle" font-size="22">🌍</text>
+  <text x="830" y="316" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600">P2P peers</text>
+
+  <!-- Arrows -->
+  <line x1="180" y1="200" x2="285" y2="150" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)" />
+  <text x="210" y="165" fill="#94a3b8" font-size="11">playlist / player</text>
+
+  <line x1="440" y1="150" x2="470" y2="150" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)" />
+  <text x="418" y="140" fill="#94a3b8" font-size="10">getstream</text>
+
+  <line x1="530" y1="205" x2="470" y2="255" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)" />
+  <text x="500" y="240" fill="#94a3b8" font-size="10">HTTP</text>
+
+  <line x1="360" y1="205" x2="410" y2="255" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-dashed)" />
+  <text x="290" y="235" fill="#64748b" font-size="10">search / stats only</text>
+
+  <line x1="532" y1="300" x2="772" y2="300" stroke="#22c55e" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-dashed)" />
+  <text x="600" y="292" fill="#94a3b8" font-size="10">P2P</text>
+
+</svg>
