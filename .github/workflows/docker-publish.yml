@@ -1,9 +1,15 @@
 name: Publish Multi-Container & Update Descriptions to Docker Hub
 
 on:
-  workflow_dispatch: # <-- Abilita il pulsante manuale
+  # Allows manual triggering from the GitHub Actions tab with an optional version input
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to publish (e.g., 1.1.0 or leave empty for latest only)'
+        required: false
+        default: ''
+  # Automatically triggers on Git tag pushes matching semver patterns
   push:
-    # Esegue la pipeline solo quando invii un tag di versione (es. v1.0, v1.1, v2.0)
     tags:
       - 'v*.*'
       - 'v*.*.*'
@@ -31,8 +37,10 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui
           tags: |
-            type=semver,pattern={{version}}
             type=raw,value=latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
 
       # --- CONTAINER 1: WEB UI ---
       - name: Build and Push WebUI
@@ -59,8 +67,10 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine
           tags: |
-            type=semver,pattern={{version}}
             type=raw,value=latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
 
       # --- CONTAINER 2: ENGINE ---
       - name: Build and Push Engine
