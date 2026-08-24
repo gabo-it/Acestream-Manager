@@ -2,9 +2,9 @@ name: Publish Multi-Container & Update Descriptions to Docker Hub
 
 on:
   push:
-    branches:
-      - main
+    # Esegue la pipeline solo quando invii un tag di versione (es. v1.0, v1.1, v2.0)
     tags:
+      - 'v*.*'
       - 'v*.*.*'
 
 jobs:
@@ -30,8 +30,8 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-webui
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=latest
 
       # --- CONTAINER 1: WEB UI ---
       - name: Build and Push WebUI
@@ -58,8 +58,8 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-engine
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=latest
 
       # --- CONTAINER 2: ENGINE ---
       - name: Build and Push Engine
