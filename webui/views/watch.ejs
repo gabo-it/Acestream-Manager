@@ -29,6 +29,7 @@
     // Solo MPEG-TS via acexy: infrastruttura collaudata (usata anche dalle
     // playlist).
     var tsUrl = <%- JSON.stringify(tsProxyUrl) %>;
+    var acestreamId = <%- JSON.stringify(channel.acestream_id) %>;
     var video = document.getElementById('player');
     var errorBox = document.getElementById('player-error');
     var errorDetail = document.getElementById('player-error-detail');
@@ -40,6 +41,7 @@
     var finished = false;
     var destroyToken = 0; // vedi destroyPlayer(): invalida i riferimenti in volo
     var triedNoAudio = false;
+    var triedRemux = false;
     var pendingRetry = null; // { fn, delay } — un retry rimandato mentre la scheda è in background
 
     function setStatus(msg) {
@@ -99,6 +101,51 @@
       }, 0);
     }
 
+    var remuxRetryCount = 0;
+    var MAX_REMUX_RETRIES = 3;
+
+    // Ultimo fallback, solo quando anche mpegts.js senza audio ha fallito:
+    // remux server-side a MP4 frammentato (via ffmpeg), riprodotto dal
+    // <video> nativamente, senza passare da MediaSource Extensions. Non
+    // tocca il percorso mpegts.js sopra, che resta l'unico usato finché
+    // funziona (Firefox in pratica non arriva mai qui). Ha un suo ciclo di
+    // retry separato: un intoppo transitorio della sorgente (comune sui
+    // rilanci P2P meno puliti) non deve significare resa immediata — ogni
+    // retry apre un processo ffmpeg nuovo di zecca.
+    function tryRemuxFallback() {
+      destroyPlayer();
+      setTimeout(startRemux, 100);
+    }
+
+    function startRemux() {
+      setStatus(<%- JSON.stringify(t('watch.trying_remux')) %> + (remuxRetryCount > 0 ? ' (' + remuxRetryCount + '/' + MAX_REMUX_RETRIES + ')' : ''));
+      video.src = '/stream-proxy/fmp4/' + acestreamId + '?_r=' + Date.now();
+      video.load();
+      var onError = function () {
+        video.removeEventListener('error', onError);
+        var detail = video.error ? ('code ' + video.error.code + (video.error.message ? ' — ' + video.error.message : '')) : '(nessun dettaglio)';
+        console.error('[watch] remux: errore nativo del <video>:', detail);
+
+        if (remuxRetryCount < MAX_REMUX_RETRIES) {
+          remuxRetryCount += 1;
+          try { video.pause(); video.removeAttribute('src'); video.load(); } catch (e) { /* ignora */ }
+          scheduleRetry(startRemux, 1500);
+          return;
+        }
+        showError(<%- JSON.stringify(t('watch.remux_failed')) %>);
+      };
+      video.addEventListener('error', onError);
+      video.play().then(function () {
+        setStatus(<%- JSON.stringify(t('watch.playing_remux')) %>);
+      }).catch(function (err) {
+        if (err && err.name === 'NotAllowedError') {
+          setStatus(<%- JSON.stringify(t('watch.click_to_play')) %>);
+        } else {
+          console.warn('[watch] play() remux fallito:', err && err.message);
+        }
+      });
+    }
+
     function startPlayer() {
       if (typeof mpegts === 'undefined') {
         showError('mpegts.js non caricato.');
@@ -144,6 +191,13 @@
           setStatus(<%- JSON.stringify(t('watch.trying_no_audio')) %>);
           destroyPlayer();
           scheduleRetry(startPlayer, 1000);
+          return;
+        }
+        // Anche senza audio non ha funzionato: prima di arrenderci,
+        // proviamo il remux server-side (bypassa del tutto MSE/mpegts.js).
+        if (!triedRemux) {
+          triedRemux = true;
+          tryRemuxFallback();
           return;
         }
         showError(String(type) + (detail ? ' — ' + detail : ''));

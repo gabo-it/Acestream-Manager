@@ -1,7 +1,11 @@
 FROM node:20-slim
 
+# ffmpeg: usato solo per il fallback finale del player web (remux
+# server-side MPEG-TS -> MP4 frammentato, vedi remux.js) quando
+# MediaSource Extensions/mpegts.js non funziona su un flusso — non è
+# richiesto per nient'altro nello stack.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 make g++ \
+    && apt-get install -y --no-install-recommends python3 make g++ ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -17,6 +17,7 @@ const { suggestTvgIds, suggestLogosFromSearch } = require('./suggestions');
 const { searchTeams, getTeamMatches, getBroadcastersByCountry, parseTeamUrl } = require('./football');
 const { getStats, stopSession, getStatsEngineUrl, setStatsEngineUrl, isUsingDefaultEngine } = require('./statsProxy');
 const { proxyTs, proxyHlsManifest, proxyHlsPassthrough } = require('./streamProxy');
+const { remuxToFmp4 } = require('./remux');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -334,6 +335,18 @@ app.get('/vlc-direct.m3u', (req, res) => {
 app.get('/stream-proxy/ts/:id', proxyTs);
 app.get('/stream-proxy/hls/:id/manifest.m3u8', proxyHlsManifest);
 app.get('/stream-proxy/hls/:id/*', proxyHlsPassthrough);
+
+// Fallback finale del player web: remux server-side a MP4 frammentato via
+// ffmpeg (vedi remux.js), usato solo quando mpegts.js/MSE ha già fallito
+// tutti i suoi tentativi normali. Il processo ffmpeg va terminato quando
+// il client si disconnette, altrimenti resta a girare a vuoto.
+app.get('/stream-proxy/fmp4/:id', (req, res) => {
+  if (!/^[a-fA-F0-9]{40}$/.test(req.params.id)) return res.status(400).end();
+  const ffmpeg = remuxToFmp4(req.params.id, res);
+  req.on('close', () => {
+    if (!ffmpeg.killed) ffmpeg.kill('SIGKILL');
+  });
+});
 
 // ---------- Sorgenti (scraping ricorrente) ----------
 

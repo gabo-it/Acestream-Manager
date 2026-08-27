@@ -279,7 +279,9 @@ Raise `ACEXY_NO_RESPONSE_TIMEOUT` (try `60s`), check the P2P port is actually re
 <details>
 <summary>Web player fails, but VLC/AcePlayer play the same link fine</summary>
 
-Try **Firefox** first — Chromium's (Chrome/Edge) MediaSource Extensions are confirmed stricter than Firefox's for some H.264 streams. Otherwise the stream likely uses a codec browsers can't decode via MSE (e.g. MPEG-2), which needs server-side transcoding (not included here). The direct link is always shown under the player.
+The web player automatically falls back through several strategies before giving up: retries, then video-only (in case the audio track uses a codec MediaSource Extensions can't decode, like AC-3), then finally a server-side remux to fragmented MP4 (via `ffmpeg`, video stream-copied so it's cheap, audio forced to AAC) played through the plain `<video>` element — this bypasses MediaSource Extensions entirely, sidestepping Chromium's (Chrome/Edge) stricter MSE validation that Firefox tolerates. This fixes many, but not all, previously-failing streams.
+
+**Known limitation**: a minority of streams have a genuine H.264 bitstream irregularity (some encoders don't repeat SPS/PPS parameter sets correctly before every keyframe) that trips up `ffmpeg`'s own parser too — confirmed via its `non-existing PPS referenced` warning, persisting even with a generous analysis window. Firefox's own MSE implementation happens to tolerate this specific quirk; Chromium's stricter validation and `ffmpeg`'s parser both don't. For these streams, VLC/AcePlayer (or Firefox) remain the reliable option — the direct link is always shown under the player.
 </details>
 
 <details>
@@ -345,7 +347,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v1.2-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v1.3-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>
