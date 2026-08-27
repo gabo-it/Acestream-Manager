@@ -1,0 +1,4 @@
+node_modules/
+webui/data/*.db
+webui/data/*.db-*
+.env

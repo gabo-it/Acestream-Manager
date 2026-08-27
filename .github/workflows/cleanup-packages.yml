@@ -1,27 +1,50 @@
-name: Bulk Delete Untagged Package Versions
+name: Cleanup Untagged Package Versions
 
+# Manual only: run from the Actions tab whenever you want to prune old
+# untagged/SHA-tagged image versions accumulated from past pushes. Never
+# runs automatically, so there's no risk of it firing unexpectedly.
+#
+# Uses dataaxiom/ghcr-cleanup-action instead of actions/delete-package-versions:
+# the latter aborts the whole run on a single "Package not found" (404) —
+# which is exactly what happened here — while this one explicitly tolerates
+# isolated 404s and only fails on repeated ones (see its changelog). It also
+# has a real dry-run option, unlike an earlier version of this workflow.
 on:
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (log what would be deleted, delete nothing)'
+        type: boolean
+        default: true
 
 jobs:
-  delete-untagged-versions:
+  cleanup:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-      contents: read
+    strategy:
+      matrix:
+        package: [acestream-engine, acestream-webui]
     steps:
-      - name: Delete untagged WebUI versions
-        uses: actions/delete-package-versions@v5
+      - name: Delete untagged versions of ${{ matrix.package }}
+        uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package-name: 'acestream-webui'
-          package-type: 'container'
-          min-versions-to-keep: 0
-          delete-only-untagged-versions: 'true'
+          package: ${{ matrix.package }}
+          delete-untagged: true
+          dry-run: ${{ inputs.dry_run }}
 
-      - name: Delete untagged Engine versions
-        uses: actions/delete-package-versions@v5
+      - name: Delete old commit-SHA tags of ${{ matrix.package }}
+        # The old (now-replaced) workflow tagged every single push with the
+        # full git commit SHA (e.g. eeb5907a2f2686643423d13e16044e2ffb008f0c
+        # — a 40-character hex string), leaving dozens of these around, each
+        # protecting its own untagged platform children from cleanup above.
+        # This regex matches exactly that pattern — nothing else — and
+        # exclude-tags is an extra safety net on top, in case the regex ever
+        # matches something unexpected.
+        uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package-name: 'acestream-engine'
-          package-type: 'container'
-          min-versions-to-keep: 0
-          delete-only-untagged-versions: 'true'
+          package: ${{ matrix.package }}
+          delete-tags: '^[0-9a-f]{40}$'
+          use-regex: true
+          exclude-tags: 'latest,v1.0,3.2.11'
+          dry-run: ${{ inputs.dry_run }}
