@@ -11,7 +11,7 @@ Create a `docker-compose.yml` with the content below, adjust any values directly
 ```yaml
 services:
   acestream:
-    image: ghcr.io/gabo-it/acestream-engine:latest
+    image: gaboita/acestream-engine:latest
     container_name: acestream-engine
     restart: unless-stopped
     environment:
@@ -59,7 +59,7 @@ services:
       - acestream-net
 
   webui:
-    image: ghcr.io/gabo-it/acestream-webui:latest
+    image: gaboita/acestream-webui:latest
     container_name: acestream-webui
     restart: unless-stopped
     depends_on:
