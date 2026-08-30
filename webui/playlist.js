@@ -74,15 +74,23 @@ async function buildXmltv() {
       .all(...tvgIds);
 
     // Traduce i titoli (non le descrizioni, per contenere il volume di
-    // chiamate) nella lingua guida scelta in Impostazioni — solo per il
-    // testo in alfabeti non latini, con un tetto massimo di traduzioni per
-    // singola richiesta: un export EPG completo può contenere migliaia di
-    // programmi, e tradurli tutti ad ogni richiesta esaurirebbe la quota
-    // gratuita dell'API in un colpo solo. Oltre il tetto, i titoli restano
-    // nella lingua originale per QUESTA richiesta — la cache (SQLite) fa sì
-    // che le richieste successive (i player IPTV ripescano l'EPG spesso)
-    // recuperino gradualmente i titoli già tradotti, senza costo aggiuntivo.
+    // chiamate) nella lingua guida scelta in Impostazioni, con un tetto
+    // massimo di traduzioni per singola richiesta: un export EPG completo
+    // può contenere migliaia di programmi, e tradurli tutti ad ogni
+    // richiesta esaurirebbe la quota gratuita dell'API in un colpo solo.
+    // Oltre il tetto, i titoli restano nella lingua originale per QUESTA
+    // richiesta — la cache (SQLite) fa sì che le richieste successive (i
+    // player IPTV ripescano l'EPG spesso) recuperino gradualmente i titoli
+    // già tradotti, senza costo aggiuntivo.
+    //
+    // Se "Lingua sorgente EPG" è impostata esplicitamente, traduce TUTTO
+    // (anche testo già in alfabeto latino). Se lasciata su "Auto", resta
+    // il comportamento sicuro di sempre: solo alfabeti non latini,
+    // rilevati euristicamente — indovinare la lingua sorgente tra le tante
+    // varianti europee sarebbe troppo inaffidabile senza una dichiarazione
+    // esplicita dell'utente.
     const epgLanguage = getSetting('epg_language', '');
+    const epgSourceLanguage = getSetting('epg_source_language', '');
     const MAX_XMLTV_TRANSLATIONS_PER_REQUEST = 150;
 
     let titles = programs.map((p) => p.title);
@@ -93,9 +101,10 @@ async function buildXmltv() {
       // richiesta troppo lenta per un player IPTV che interroga /epg.xml.
       titles = await Promise.all(
         programs.map(async (p) => {
-          if (guessSourceLang(p.title) && translationAttempts < MAX_XMLTV_TRANSLATIONS_PER_REQUEST) {
+          const shouldAttempt = epgSourceLanguage || guessSourceLang(p.title);
+          if (shouldAttempt && translationAttempts < MAX_XMLTV_TRANSLATIONS_PER_REQUEST) {
             translationAttempts += 1;
-            return translateText(p.title, epgLanguage);
+            return translateText(p.title, epgLanguage, epgSourceLanguage || undefined);
           }
           return p.title;
         })

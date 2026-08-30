@@ -179,6 +179,11 @@ function parseTeamUrl(url) {
 // squadra): se conosciamo il nome della squadra (dall'indice locale, o
 // dal titolo della pagina come fallback) filtriamo per tenere solo le
 // partite che la coinvolgono davvero.
+//
+// La data di ogni partita si ricava dal link /schedules/YYYY-MM-DD/ che
+// precede ogni gruppo di partite nella pagina (verificato contro l'HTML
+// reale, agosto 2026) — più affidabile del testo "Saturday, 23 May" da
+// solo, che non include l'anno.
 async function getTeamMatches(country, slug, teamName) {
   const url = `${BASE}/teams/${country}/${slug}/`;
   const html = await fetchHtml(url);
@@ -189,17 +194,42 @@ async function getTeamMatches(country, slug, teamName) {
 
   const matches = [];
   const seen = new Set();
+  let currentDate = null; // 'YYYY-MM-DD' dall'ultimo header data incontrato
 
-  $('a[href*="/match/"]').each((_, el) => {
+  $('a[href*="/schedules/"], a[href*="/match/"]').each((_, el) => {
     const href = $(el).attr('href') || '';
+
+    const dateMatch = href.match(/\/schedules\/(\d{4}-\d{2}-\d{2})\/?/);
+    if (dateMatch) {
+      currentDate = dateMatch[1];
+      return;
+    }
+
     const text = $(el).text().replace(/\s+/g, ' ').trim();
     if (!text || seen.has(href) || text.length < 3) return;
     if (needle && !text.toLowerCase().includes(needle)) return;
     seen.add(href);
-    matches.push({ title: text, url: href.startsWith('http') ? href : `${BASE}${href}` });
+    matches.push({
+      title: text,
+      url: href.startsWith('http') ? href : `${BASE}${href}`,
+      date: currentDate,
+    });
   });
 
-  return matches.slice(0, 30);
+  const result = matches.slice(0, 30);
+  result.resolvedName = name; // utile quando il chiamante non ha già un nome (es. flusso "incolla URL")
+  return result;
 }
 
-module.exports = { searchTeams, getTeamMatches, getBroadcastersByCountry, parseTeamUrl };
+// Come getTeamMatches, ma filtra alle sole partite future (data >= oggi)
+// e le ordina cronologicamente — usato per la scheda "Squadra preferita".
+async function getUpcomingTeamMatches(country, slug, teamName, limit = 5) {
+  const all = await getTeamMatches(country, slug, teamName);
+  const today = new Date().toISOString().slice(0, 10);
+  return all
+    .filter((m) => m.date && m.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, limit);
+}
+
+module.exports = { searchTeams, getTeamMatches, getUpcomingTeamMatches, getBroadcastersByCountry, parseTeamUrl };

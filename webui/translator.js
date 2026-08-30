@@ -29,9 +29,16 @@ function guessSourceLang(text) {
   return null;
 }
 
-async function translateText(text, targetLang) {
+// forceSourceLang: se fornita esplicitamente (impostazione "Lingua sorgente
+// EPG"), traduce SEMPRE da quella lingua dichiarata, indipendentemente
+// dall'alfabeto — copre anche testo in alfabeto latino (es. inglese ->
+// italiano), possibile solo perché stavolta la lingua sorgente non è
+// indovinata ma dichiarata esplicitamente dall'utente, che la conosce.
+// Senza questo parametro, resta il comportamento "sicuro" di sempre: solo
+// alfabeti non latini, rilevati euristicamente.
+async function translateText(text, targetLang, forceSourceLang) {
   if (!text || !targetLang) return text;
-  const sourceLang = guessSourceLang(text);
+  const sourceLang = forceSourceLang || guessSourceLang(text);
   if (!sourceLang || sourceLang === targetLang) return text;
 
   const langpair = `${sourceLang}|${targetLang}`;
@@ -57,8 +64,8 @@ async function translateText(text, targetLang) {
 
 // Traduce più stringhe in parallelo (più veloce di farlo in sequenza, utile
 // per una lista di programmi o candidati).
-async function translateBatch(texts, targetLang) {
-  return Promise.all(texts.map((t) => translateText(t, targetLang)));
+async function translateBatch(texts, targetLang, forceSourceLang) {
+  return Promise.all(texts.map((t) => translateText(t, targetLang, forceSourceLang)));
 }
 
 module.exports = { guessSourceLang, translateText, translateBatch };

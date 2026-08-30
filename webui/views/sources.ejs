@@ -163,6 +163,21 @@ acestream://0123456789abcdef0123456789abcdef01234567"
     <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_language_help') %></p>
   </div>
 
+  <div>
+    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_source_language_label') %></label>
+    <select name="epg_source_language" class="w-56 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500">
+      <option value="" <%= !epgSourceLanguage ? 'selected' : '' %>><%= t('settings.epg_source_language_auto') %></option>
+      <option value="it" <%= epgSourceLanguage === 'it' ? 'selected' : '' %>>Italiano</option>
+      <option value="en" <%= epgSourceLanguage === 'en' ? 'selected' : '' %>>English</option>
+      <option value="fr" <%= epgSourceLanguage === 'fr' ? 'selected' : '' %>>Français</option>
+      <option value="es" <%= epgSourceLanguage === 'es' ? 'selected' : '' %>>Español</option>
+      <option value="de" <%= epgSourceLanguage === 'de' ? 'selected' : '' %>>Deutsch</option>
+      <option value="ru" <%= epgSourceLanguage === 'ru' ? 'selected' : '' %>>Русский</option>
+      <option value="pt" <%= epgSourceLanguage === 'pt' ? 'selected' : '' %>>Português</option>
+    </select>
+    <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_source_language_help') %></p>
+  </div>
+
   <div class="flex gap-3">
     <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
       <%= t('settings.save') %>

@@ -16,6 +16,34 @@
   </button>
 </form>
 
+<div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4 mb-6 max-w-xl">
+  <% if (favoriteTeam) { %>
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold">★ <%= favoriteTeam.name %></h2>
+      <form method="POST" action="/football/favorite/clear">
+        <button class="text-xs text-slate-500 hover:text-slate-300 underline"><%= t('football.remove_favorite') %></button>
+      </form>
+    </div>
+    <% if (favoriteError) { %>
+      <p class="text-sm text-red-400"><%= t('football.search_failed') %>: <%= favoriteError %></p>
+    <% } else if (favoriteMatches.length === 0) { %>
+      <p class="text-sm text-slate-500"><%= t('football.no_upcoming_matches') %></p>
+    <% } else { %>
+      <div class="grid gap-2">
+        <% favoriteMatches.forEach(function(m) { %>
+          <a href="/football/match?url=<%= encodeURIComponent(m.url) %>"
+             class="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 hover:border-indigo-500 transition flex items-center justify-between text-sm">
+            <span><%= m.title %></span>
+            <% if (m.date) { %><span class="text-xs text-slate-500 flex-shrink-0 ml-2"><%= m.date %></span><% } %>
+          </a>
+        <% }); %>
+      </div>
+    <% } %>
+  <% } else { %>
+    <p class="text-sm text-slate-500"><%= t('football.no_favorite_yet') %></p>
+  <% } %>
+</div>
+
 <details class="mb-6 max-w-xl">
   <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-400"><%= t('football.url_fallback_toggle') %></summary>
   <div class="mt-3">

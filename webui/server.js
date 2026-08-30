@@ -14,7 +14,7 @@ const { getTranslator, SUPPORTED_LANGUAGES } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
 const { translateBatch } = require('./translator');
 const { suggestTvgIds, suggestLogosFromSearch } = require('./suggestions');
-const { searchTeams, getTeamMatches, getBroadcastersByCountry, parseTeamUrl } = require('./football');
+const { searchTeams, getTeamMatches, getUpcomingTeamMatches, getBroadcastersByCountry, parseTeamUrl } = require('./football');
 const { getStats, stopSession, getStatsEngineUrl, setStatsEngineUrl, isUsingDefaultEngine } = require('./statsProxy');
 const { proxyTs, proxyHlsManifest, proxyHlsPassthrough } = require('./streamProxy');
 const { remuxToFmp4 } = require('./remux');
@@ -178,10 +178,17 @@ app.get('/channels/:id/schedule', async (req, res) => {
   // traduzione. Il testo già in alfabeto latino resta invariato (vedi
   // translator.js): copre bene il caso "nome canale in inglese, EPG in
   // un altro alfabeto".
+  // Se "Lingua sorgente EPG" è impostata esplicitamente, traduce TUTTO
+  // (anche testo già in alfabeto latino) da quella lingua dichiarata. Se
+  // lasciata su "Auto", resta il comportamento sicuro di sempre: solo
+  // alfabeti non latini, rilevati euristicamente (vedi translator.js) —
+  // indovinare la lingua sorgente tra le tante varianti europee sarebbe
+  // troppo inaffidabile senza una dichiarazione esplicita dell'utente.
   const epgLanguage = getSetting('epg_language', '');
+  const epgSourceLanguage = getSetting('epg_source_language', '');
   if (epgLanguage && programs.length) {
     try {
-      const translatedTitles = await translateBatch(programs.map((p) => p.title), epgLanguage);
+      const translatedTitles = await translateBatch(programs.map((p) => p.title), epgLanguage, epgSourceLanguage || undefined);
       programs = programs.map((p, i) => ({ ...p, title: translatedTitles[i] }));
     } catch (err) {
       console.error('[schedule] traduzione fallita:', err.message);
@@ -359,6 +366,7 @@ app.get('/sources', (req, res) => {
     epgRefreshHours: getSetting('epg_refresh_hours', '6'),
     epgLastResult: getSetting('epg_last_result', ''),
     epgLanguage: getSetting('epg_language', ''),
+    epgSourceLanguage: getSetting('epg_source_language', ''),
   });
 });
 
@@ -368,6 +376,11 @@ app.post('/sources/epg', (req, res) => {
   setSetting('epg_refresh_hours', String(hours));
   const allowedLangs = new Set(['', 'it', 'en', 'fr', 'es']);
   setSetting('epg_language', allowedLangs.has(req.body.epg_language) ? req.body.epg_language : '');
+  // Set più ampio per la sorgente: qui copriamo lingue effettivamente
+  // incontrate in EPG reali durante lo sviluppo (es. tedesco, russo), non
+  // solo quelle disponibili come lingua di destinazione.
+  const allowedSourceLangs = new Set(['', 'it', 'en', 'fr', 'es', 'de', 'ru', 'pt']);
+  setSetting('epg_source_language', allowedSourceLangs.has(req.body.epg_source_language) ? req.body.epg_source_language : '');
   scheduleEpgRefresh();
   res.redirect('/sources');
 });
@@ -605,7 +618,39 @@ app.get('/football', async (req, res) => {
       error = err.message;
     }
   }
-  render(res, 'football', { titleKey: 'football.title', team, candidates, error });
+
+  // Squadra preferita: salvata come JSON {country, slug, name} in settings.
+  // Se impostata, carichiamo qui anche le sue prossime partite (max 5) per
+  // la scheda mostrata sotto la ricerca.
+  let favoriteTeam = null;
+  let favoriteMatches = [];
+  let favoriteError = null;
+  const favoriteRaw = getSetting('football_favorite_team', '');
+  if (favoriteRaw) {
+    try {
+      favoriteTeam = JSON.parse(favoriteRaw);
+      favoriteMatches = await getUpcomingTeamMatches(favoriteTeam.country, favoriteTeam.slug, favoriteTeam.name, 5);
+    } catch (err) {
+      favoriteError = err.message;
+    }
+  }
+
+  render(res, 'football', { titleKey: 'football.title', team, candidates, error, favoriteTeam, favoriteMatches, favoriteError });
+});
+
+app.post('/football/favorite', (req, res) => {
+  const country = (req.body.country || '').trim();
+  const slug = (req.body.slug || '').trim();
+  const name = (req.body.name || '').trim();
+  if (country && slug && name) {
+    setSetting('football_favorite_team', JSON.stringify({ country, slug, name }));
+  }
+  res.redirect('/football');
+});
+
+app.post('/football/favorite/clear', (req, res) => {
+  setSetting('football_favorite_team', '');
+  res.redirect('/football');
 });
 
 // Fallback: per squadre non presenti nell'indice locale (fuori dai
@@ -627,7 +672,7 @@ app.post('/football/team-url', (req, res) => {
 app.get('/football/team', async (req, res) => {
   const country = (req.query.country || '').trim();
   const slug = (req.query.slug || '').trim();
-  const name = (req.query.name || '').trim();
+  let name = (req.query.name || '').trim();
   let matches = [];
   let error = null;
   if (!country || !slug) {
@@ -635,11 +680,12 @@ app.get('/football/team', async (req, res) => {
   } else {
     try {
       matches = await getTeamMatches(country, slug, name);
+      if (!name && matches.resolvedName) name = matches.resolvedName;
     } catch (err) {
       error = err.message;
     }
   }
-  render(res, 'football_team', { titleKey: 'football.title', country, slug, matches, error });
+  render(res, 'football_team', { titleKey: 'football.title', country, slug, name, matches, error });
 });
 
 app.get('/football/match', async (req, res) => {
@@ -698,14 +744,35 @@ app.get('/engine', async (req, res) => {
     .filter(Boolean)
     .join(' ');
 
+  // Estrae flag+valore da ENGINE_FLAGS (es. "--live-cache-type memory"
+  // -> flag "--live-cache-type", value "memory"; "--bind-all" da solo,
+  // senza valore che segue -> considerato un flag booleano "(attivo)").
+  // Il bug precedente mostrava sempre "—" al posto del valore reale.
+  function parseEngineFlags(flagsStr) {
+    const tokens = flagsStr.split(/\s+/).filter(Boolean);
+    const result = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      if (!tok.startsWith('--')) continue;
+      const next = tokens[i + 1];
+      if (next && !next.startsWith('--')) {
+        result.push({ flag: tok, value: next });
+        i++;
+      } else {
+        result.push({ flag: tok, value: '(attivo)' });
+      }
+    }
+    return result;
+  }
+
   // Elenco dei parametri attualmente in uso, con verifica rispetto alla
   // documentazione ufficiale: mostrato in sola lettura nel tab Motore.
-  const flagsFromEngineFlags = (params.engineFlags.match(/--[a-z-]+/g) || []);
+  const flagsFromEngineFlags = parseEngineFlags(params.engineFlags);
   const paramsAudit = [
     { label: 'Porta HTTP', flag: '--http-port', value: params.httpPort },
     { label: 'Porta P2P', flag: '--port', value: params.p2pPort },
     { label: 'Access token', flag: '--access-token', value: params.accessToken ? '••••••' : '(non impostato)' },
-    ...flagsFromEngineFlags.map((f) => ({ label: 'Flag (ENGINE_FLAGS)', flag: f, value: '—' })),
+    ...flagsFromEngineFlags.map((f) => ({ label: 'Flag (ENGINE_FLAGS)', flag: f.flag, value: f.value })),
   ].map((p) => ({ ...p, isOfficial: OFFICIAL_ENGINE_FLAGS.has(p.flag) }));
 
   let engineStatus = { ok: false, error: reqT()('errors.not_verified') };
