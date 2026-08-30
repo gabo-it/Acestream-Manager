@@ -57,6 +57,26 @@ function loadFranc() {
   return francPromise;
 }
 
+// Rilevamento SOLO dell'alfabeto (range Unicode), sincrono e sempre
+// affidabile al 100% quando ritorna una lingua — a differenza di
+// guessSourceLang() sotto, non tenta MAI il rilevamento statistico sul
+// testo in alfabeto latino, quindi ritorna null anche per lingue latine
+// diverse dal target. Usata da chi ha bisogno solo di sapere "stesso
+// alfabeto o no" (es. suggestions.js, per decidere se un confronto
+// carattere-per-carattere ha senso), non di una lingua specifica per la
+// traduzione.
+function isNonLatinScript(text) {
+  if (/[\u0400-\u04FF]/.test(text)) return 'ru'; // Cirillico (russo/ucraino/bulgaro/serbo...)
+  if (/[\u0370-\u03FF]/.test(text)) return 'el'; // Greco
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar'; // Arabo
+  if (/[\u0590-\u05FF]/.test(text)) return 'he'; // Ebraico
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'zh'; // Cinese
+  if (/[\u3040-\u30FF]/.test(text)) return 'ja'; // Giapponese
+  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko'; // Coreano
+  if (/[\u0E00-\u0E7F]/.test(text)) return 'th'; // Thai
+  return null;
+}
+
 // MyMemory (https://mymemory.translated.net) non supporta il rilevamento
 // automatico della lingua sorgente ("autodetect" viene esplicitamente
 // rifiutato dall'API) — serve dichiarare una lingua sorgente esplicita per
@@ -72,15 +92,13 @@ function loadFranc() {
 //    lingue (italiano/inglese/francese/spagnolo usano lo stesso alfabeto),
 //    quindi qui usiamo un rilevamento statistico (franc, analisi di
 //    n-grammi) pensato apposta per questo.
+//
+// A differenza di isNonLatinScript() sopra, QUESTA può ritornare una
+// lingua anche per testo in alfabeto latino — non va usata per decidere
+// "stesso alfabeto o no", solo per la traduzione vera e propria.
 async function guessSourceLang(text) {
-  if (/[\u0400-\u04FF]/.test(text)) return 'ru'; // Cirillico (russo/ucraino/bulgaro/serbo...)
-  if (/[\u0370-\u03FF]/.test(text)) return 'el'; // Greco
-  if (/[\u0600-\u06FF]/.test(text)) return 'ar'; // Arabo
-  if (/[\u0590-\u05FF]/.test(text)) return 'he'; // Ebraico
-  if (/[\u4E00-\u9FFF]/.test(text)) return 'zh'; // Cinese
-  if (/[\u3040-\u30FF]/.test(text)) return 'ja'; // Giapponese
-  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko'; // Coreano
-  if (/[\u0E00-\u0E7F]/.test(text)) return 'th'; // Thai
+  const nonLatin = isNonLatinScript(text);
+  if (nonLatin) return nonLatin;
 
   try {
     const { franc } = await loadFranc();
@@ -129,4 +147,4 @@ async function translateBatch(texts, targetLang) {
   return Promise.all(texts.map((t) => translateText(t, targetLang)));
 }
 
-module.exports = { guessSourceLang, translateText, translateBatch };
+module.exports = { guessSourceLang, isNonLatinScript, translateText, translateBatch };

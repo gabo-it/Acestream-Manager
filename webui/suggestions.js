@@ -79,7 +79,7 @@ function safeLogoUrl(url) {
 }
 
 async function suggestTvgIds(channelName, limit = 5) {
-  const { guessSourceLang, translateText } = require('./translator');
+  const { isNonLatinScript, translateText } = require('./translator');
   const epgChannels = db.prepare('SELECT tvg_id, display_name, logo_url FROM epg_channels').all();
 
   console.log(`[suggestions] "${channelName}": ${epgChannels.length} canali EPG disponibili in totale`);
@@ -94,7 +94,14 @@ async function suggestTvgIds(channelName, limit = 5) {
   const scored = await Promise.all(
     epgChannels.map(async (c) => {
       const logoUrl = safeLogoUrl(c.logo_url);
-      const sourceLang = guessSourceLang(c.display_name);
+      // isNonLatinScript (non guessSourceLang) apposta: qui serve solo
+      // sapere "stesso alfabeto o no" per decidere se il confronto
+      // carattere-per-carattere ha senso — guessSourceLang rileverebbe
+      // (via franc) una lingua anche per nomi canale già in alfabeto
+      // latino (es. "Sky Sport Bundesliga.de" → tedesco), facendoli
+      // passare inutilmente dalla traduzione anche quando un confronto
+      // diretto sarebbe stato gratuito e altrettanto valido.
+      const sourceLang = isNonLatinScript(c.display_name);
 
       if (!sourceLang) {
         // Stesso alfabeto (latino su entrambi i lati): confronto diretto.

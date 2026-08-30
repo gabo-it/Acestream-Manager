@@ -202,14 +202,18 @@ async function refreshEpg() {
     }
   }
 
-  // Se questo giro non ha prodotto nulla (es. limite di download giornaliero
-  // raggiunto sulla sorgente, servizio irraggiungibile, ecc.), NON
-  // sovrascriviamo l'EPG già scaricato in precedenza: meglio una guida
-  // leggermente vecchia che nessuna guida. Le tabelle vengono aggiornate
-  // solo se questo fetch ha davvero prodotto qualcosa.
-  if (allPrograms.length === 0 && allEpgChannels.size === 0) {
+  // Se anche una sola fonte ha avuto problemi in questo giro (limite di
+  // download raggiunto, servizio irraggiungibile, formato non valido...),
+  // NON sovrascriviamo l'EPG già scaricato in precedenza — nemmeno per le
+  // fonti che invece sono andate bene. Il motivo: le tabelle vengono
+  // sostituite per intero ad ogni giro (non per singola fonte), quindi
+  // procedere comunque cancellerebbe silenziosamente tutti i dati della
+  // fonte fallita, anche se erano perfettamente validi fino a un attimo
+  // prima — un problema temporaneo su UNA fonte (es. quota giornaliera
+  // esaurita) non deve costare la perdita di dati sulle altre.
+  if (errors.length > 0) {
     const summary =
-      `Aggiornamento fallito, mantenuta l'EPG precedente — problemi: ${errors.join(' | ') || 'nessun dato ricevuto'}` +
+      `Aggiornamento parziale o fallito, mantenuta l'EPG precedente per intero — problemi: ${errors.join(' | ')}` +
       ` (${new Date().toLocaleString('it-IT')})`;
     setSetting('epg_last_result', summary);
     console.warn(`[epg] ${summary}`);
