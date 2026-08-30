@@ -9,15 +9,70 @@ CREATE TABLE IF NOT EXISTS translation_cache (
 );
 `);
 
+// Mappa dai codici ISO 639-3 (3 lettere, usati da franc) ai codici ISO
+// 639-1 (2 lettere, quelli che l'API MyMemory si aspetta). Copre le lingue
+// europee/globali più comuni nelle guide EPG — non esaustiva, ma un
+// riconoscimento mancato si traduce semplicemente in "nessuna traduzione
+// per questa stringa", mai in un errore.
+const ISO_639_3_TO_1 = {
+  ita: 'it',
+  eng: 'en',
+  fra: 'fr', fre: 'fr',
+  spa: 'es',
+  deu: 'de', ger: 'de',
+  por: 'pt',
+  nld: 'nl', dut: 'nl',
+  pol: 'pl',
+  ron: 'ro', rum: 'ro',
+  ces: 'cs', cze: 'cs',
+  hun: 'hu',
+  swe: 'sv',
+  nob: 'no', nno: 'no', nor: 'no',
+  dan: 'da',
+  fin: 'fi',
+  ell: 'el', gre: 'el',
+  tur: 'tr',
+  bul: 'bg',
+  hrv: 'hr',
+  srp: 'sr',
+  ukr: 'uk',
+  rus: 'ru',
+  ara: 'ar',
+  heb: 'he',
+  zho: 'zh', chi: 'zh',
+  jpn: 'ja',
+  kor: 'ko',
+  tha: 'th',
+  vie: 'vi',
+  ind: 'id',
+};
+
+// franc è ESM-only: da un modulo CommonJS come questo va caricato con
+// import() dinamico invece del solito require(). Cachiamo la promise per
+// non ripetere il caricamento ad ogni chiamata (Node cache comunque i
+// moduli ES internamente, ma evitiamo l'overhead della promise ripetuta).
+let francPromise = null;
+function loadFranc() {
+  if (!francPromise) francPromise = import('franc');
+  return francPromise;
+}
+
 // MyMemory (https://mymemory.translated.net) non supporta il rilevamento
 // automatico della lingua sorgente ("autodetect" viene esplicitamente
-// rifiutato dall'API) — serve dichiarare una lingua sorgente esplicita.
-// Usiamo un'euristica basata sull'alfabeto: copre bene i casi più comuni di
-// nomi canale/programma in alfabeti non latini (es. cirillico). Il testo
-// già in alfabeto latino non viene toccato: indovinare la lingua sorgente
-// tra le tante possibili varianti europee sarebbe troppo inaffidabile e
-// rischierebbe di storpiare testo già corretto.
-function guessSourceLang(text) {
+// rifiutato dall'API) — serve dichiarare una lingua sorgente esplicita per
+// OGNI richiesta di traduzione. Una guida EPG può però contenere fonti in
+// lingue diverse mescolate tra loro (es. canali italiani, russi e inglesi
+// nello stesso file), quindi non ha senso chiedere "la" lingua sorgente
+// come impostazione unica — il rilevamento va fatto per singola stringa:
+//
+// 1. Alfabeti non latini (cirillico, arabo, ecc.): riconoscimento tramite
+//    range Unicode, già affidabile al 100% da solo — se il testo contiene
+//    caratteri cirillici è certamente russo/ucraino/ecc., non serve altro.
+// 2. Alfabeto latino: i soli caratteri usati non bastano a distinguere le
+//    lingue (italiano/inglese/francese/spagnolo usano lo stesso alfabeto),
+//    quindi qui usiamo un rilevamento statistico (franc, analisi di
+//    n-grammi) pensato apposta per questo.
+async function guessSourceLang(text) {
   if (/[\u0400-\u04FF]/.test(text)) return 'ru'; // Cirillico (russo/ucraino/bulgaro/serbo...)
   if (/[\u0370-\u03FF]/.test(text)) return 'el'; // Greco
   if (/[\u0600-\u06FF]/.test(text)) return 'ar'; // Arabo
@@ -26,19 +81,25 @@ function guessSourceLang(text) {
   if (/[\u3040-\u30FF]/.test(text)) return 'ja'; // Giapponese
   if (/[\uAC00-\uD7AF]/.test(text)) return 'ko'; // Coreano
   if (/[\u0E00-\u0E7F]/.test(text)) return 'th'; // Thai
-  return null;
+
+  try {
+    const { franc } = await loadFranc();
+    // minLength basso perché i titoli dei programmi sono spesso brevi —
+    // meno affidabile su testo molto corto, ma è un limite intrinseco del
+    // rilevamento statistico, non qualcosa che possiamo aggirare: nel
+    // dubbio, meglio provare (con cache) che rinunciare del tutto.
+    const code3 = franc(text, { minLength: 3 });
+    if (code3 === 'und') return null; // franc non è riuscito a determinarla
+    return ISO_639_3_TO_1[code3] || null;
+  } catch (err) {
+    console.error('[translator] rilevamento lingua fallito:', err.message);
+    return null;
+  }
 }
 
-// forceSourceLang: se fornita esplicitamente (impostazione "Lingua sorgente
-// EPG"), traduce SEMPRE da quella lingua dichiarata, indipendentemente
-// dall'alfabeto — copre anche testo in alfabeto latino (es. inglese ->
-// italiano), possibile solo perché stavolta la lingua sorgente non è
-// indovinata ma dichiarata esplicitamente dall'utente, che la conosce.
-// Senza questo parametro, resta il comportamento "sicuro" di sempre: solo
-// alfabeti non latini, rilevati euristicamente.
-async function translateText(text, targetLang, forceSourceLang) {
+async function translateText(text, targetLang) {
   if (!text || !targetLang) return text;
-  const sourceLang = forceSourceLang || guessSourceLang(text);
+  const sourceLang = await guessSourceLang(text);
   if (!sourceLang || sourceLang === targetLang) return text;
 
   const langpair = `${sourceLang}|${targetLang}`;
@@ -64,8 +125,8 @@ async function translateText(text, targetLang, forceSourceLang) {
 
 // Traduce più stringhe in parallelo (più veloce di farlo in sequenza, utile
 // per una lista di programmi o candidati).
-async function translateBatch(texts, targetLang, forceSourceLang) {
-  return Promise.all(texts.map((t) => translateText(t, targetLang, forceSourceLang)));
+async function translateBatch(texts, targetLang) {
+  return Promise.all(texts.map((t) => translateText(t, targetLang)));
 }
 
 module.exports = { guessSourceLang, translateText, translateBatch };

@@ -64,7 +64,7 @@ app.get('/lang/:lang', (req, res) => {
 
 // ---------- Canali ----------
 
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
   const q = (req.query.q || '').trim();
   const channels = q
     ? db
@@ -78,6 +78,39 @@ app.get('/', (req, res) => {
     epgByChannel[ch.id] = getNowNext(ch.tvg_id);
     if (ch.tvg_id) tvgIdCounts[ch.tvg_id] = (tvgIdCounts[ch.tvg_id] || 0) + 1;
   }
+
+  // Traduce i titoli "in onda ora" / "a seguire" mostrati nella lista
+  // canali, se una lingua guida è impostata in Sorgenti. Grazie alla
+  // traduzione in blocco già eseguita in background ad ogni aggiornamento
+  // EPG (vedi epg.js), la stragrande maggioranza di questi titoli sono
+  // già in cache — non richiedono una vera chiamata all'API di traduzione
+  // ad ogni caricamento di questa pagina, solo una lettura dalla cache.
+  const epgLanguage = getSetting('epg_language', '');
+  if (epgLanguage) {
+    const flatTitles = [];
+    const refs = [];
+    for (const epg of Object.values(epgByChannel)) {
+      if (epg.now) {
+        flatTitles.push(epg.now.title);
+        refs.push(epg.now);
+      }
+      if (epg.next) {
+        flatTitles.push(epg.next.title);
+        refs.push(epg.next);
+      }
+    }
+    if (flatTitles.length) {
+      try {
+        const translated = await translateBatch(flatTitles, epgLanguage);
+        refs.forEach((ref, i) => {
+          ref.title = translated[i];
+        });
+      } catch (err) {
+        console.error('[channels] traduzione now/next fallita:', err.message);
+      }
+    }
+  }
+
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
   render(res, 'index', { titleKey: 'channels.title', channels, epgByChannel, tvgIdCounts, q, acexyBaseUrl });
 });
@@ -175,20 +208,15 @@ app.get('/channels/:id/schedule', async (req, res) => {
   // Traduce i titoli (in parallelo) nella lingua guida scelta in
   // Impostazioni, se impostata — solo qui (non nella lista canali) per non
   // rallentare il caricamento principale con molte chiamate all'API di
-  // traduzione. Il testo già in alfabeto latino resta invariato (vedi
-  // translator.js): copre bene il caso "nome canale in inglese, EPG in
-  // un altro alfabeto".
-  // Se "Lingua sorgente EPG" è impostata esplicitamente, traduce TUTTO
-  // (anche testo già in alfabeto latino) da quella lingua dichiarata. Se
-  // lasciata su "Auto", resta il comportamento sicuro di sempre: solo
-  // alfabeti non latini, rilevati euristicamente (vedi translator.js) —
-  // indovinare la lingua sorgente tra le tante varianti europee sarebbe
-  // troppo inaffidabile senza una dichiarazione esplicita dell'utente.
+  // traduzione. La lingua sorgente viene rilevata per singola stringa
+  // (vedi translator.js: range Unicode per alfabeti non latini, altrimenti
+  // rilevamento statistico per il latino) — non c'è una "lingua sorgente
+  // dell'EPG" unica da dichiarare, dato che le fonti configurate possono
+  // essere in lingue diverse mescolate tra loro.
   const epgLanguage = getSetting('epg_language', '');
-  const epgSourceLanguage = getSetting('epg_source_language', '');
   if (epgLanguage && programs.length) {
     try {
-      const translatedTitles = await translateBatch(programs.map((p) => p.title), epgLanguage, epgSourceLanguage || undefined);
+      const translatedTitles = await translateBatch(programs.map((p) => p.title), epgLanguage);
       programs = programs.map((p, i) => ({ ...p, title: translatedTitles[i] }));
     } catch (err) {
       console.error('[schedule] traduzione fallita:', err.message);
@@ -366,7 +394,6 @@ app.get('/sources', (req, res) => {
     epgRefreshHours: getSetting('epg_refresh_hours', '6'),
     epgLastResult: getSetting('epg_last_result', ''),
     epgLanguage: getSetting('epg_language', ''),
-    epgSourceLanguage: getSetting('epg_source_language', ''),
   });
 });
 
@@ -376,11 +403,6 @@ app.post('/sources/epg', (req, res) => {
   setSetting('epg_refresh_hours', String(hours));
   const allowedLangs = new Set(['', 'it', 'en', 'fr', 'es']);
   setSetting('epg_language', allowedLangs.has(req.body.epg_language) ? req.body.epg_language : '');
-  // Set più ampio per la sorgente: qui copriamo lingue effettivamente
-  // incontrate in EPG reali durante lo sviluppo (es. tedesco, russo), non
-  // solo quelle disponibili come lingua di destinazione.
-  const allowedSourceLangs = new Set(['', 'it', 'en', 'fr', 'es', 'de', 'ru', 'pt']);
-  setSetting('epg_source_language', allowedSourceLangs.has(req.body.epg_source_language) ? req.body.epg_source_language : '');
   scheduleEpgRefresh();
   res.redirect('/sources');
 });

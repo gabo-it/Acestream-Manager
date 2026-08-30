@@ -1,5 +1,6 @@
 const { XMLParser } = require('fast-xml-parser');
 const { db, getSetting, setSetting } = require('./db');
+const { translateText } = require('./translator');
 
 // I limiti di espansione entità di default (introdotti da fast-xml-parser
 // come protezione contro attacchi XML entity-bomb) sono pensati per input
@@ -55,6 +56,48 @@ async function fetchXmltv(url) {
   const xml = await res.text();
   if (!xml.includes('<tv')) throw new Error('la risposta non sembra un XMLTV valido');
   return parser.parse(xml);
+}
+
+// Traduce in blocco i titoli distinti dei programmi appena importati,
+// invece di lasciare che siano i percorsi live (/epg.xml, pannello
+// Programmazione) a tradurre "al volo" con un tetto basso per non
+// rallentare la risposta. Girando qui, in background durante
+// l'aggiornamento EPG programmato, non blocca nessuna richiesta di un
+// client reale — possiamo permetterci di processare molti più titoli.
+//
+// Deduplica prima di tradurre: molti programmi (specie su più giorni)
+// condividono lo stesso titolo esatto (show ricorrenti), tradurlo una
+// volta sola per stringa distinta invece che per ogni riga evita
+// chiamate ripetute inutili.
+async function translateProgramTitlesInBackground() {
+  const epgLanguage = getSetting('epg_language', '');
+  if (!epgLanguage) return; // nessuna lingua di destinazione impostata
+
+  const rows = db.prepare('SELECT DISTINCT title FROM programs').all();
+  const titles = rows.map((r) => r.title);
+
+  // Tetto di sicurezza per singolo giro: qui gira in background, quindi
+  // molto più generoso dei tetti nei percorsi live — ma resta un tetto,
+  // per non rischiare di esaurire la quota gratuita dell'API con un EPG
+  // enorme in un colpo solo. La cache (SQLite) fa sì che i titoli già
+  // tradotti in un giro precedente vengano saltati automaticamente
+  // (translateText controlla la cache prima di chiamare l'API): i giri
+  // successivi (ad ogni aggiornamento EPG programmato) coprono
+  // gradualmente il resto.
+  const MAX_BACKGROUND_TRANSLATIONS = 1000;
+  const toTranslate = titles.slice(0, MAX_BACKGROUND_TRANSLATIONS);
+
+  // Concorrenza limitata (10 alla volta) invece di tutte insieme: con
+  // centinaia/migliaia di richieste scagliate tutte in parallelo
+  // rischieremmo di essere limitati o bloccati dall'API di traduzione.
+  const CONCURRENCY = 10;
+  let processed = 0;
+  for (let i = 0; i < toTranslate.length; i += CONCURRENCY) {
+    const chunk = toTranslate.slice(i, i + CONCURRENCY);
+    await Promise.all(chunk.map((t) => translateText(t, epgLanguage)));
+    processed += chunk.length;
+  }
+  console.log(`[epg] traduzione in background completata: ${processed}/${titles.length} titoli distinti processati`);
 }
 
 async function refreshEpg() {
@@ -151,6 +194,15 @@ async function refreshEpg() {
   setSetting('epg_last_result', summary);
 
   console.log(`[epg] ${summary}`);
+
+  // Fire-and-forget: non blocchiamo il completamento di refreshEpg (e
+  // quindi il messaggio di stato "Last EPG update") in attesa che la
+  // traduzione in blocco finisca, che con molti titoli può richiedere
+  // diversi minuti.
+  translateProgramTitlesInBackground().catch((err) =>
+    console.error('[epg] traduzione in background fallita:', err.message)
+  );
+
   return { imported: allPrograms.length, sources: urls.length, errors };
 }
 

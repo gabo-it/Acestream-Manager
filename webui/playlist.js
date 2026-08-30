@@ -1,6 +1,39 @@
 const { db, getSetting } = require('./db');
 const { getEngineParams } = require('./engineConfig');
-const { guessSourceLang, translateText } = require('./translator');
+const { translateText } = require('./translator');
+
+// Con un tetto fisso e molti canali, prendere semplicemente i primi N
+// programmi in ordine cronologico GLOBALE (su tutti i canali insieme)
+// rischia di lasciare fuori interi canali, se i loro programmi cadono
+// sempre oltre la posizione N — es. con 3500+ programmi su decine di
+// canali e un tetto di 150, alcuni canali potrebbero non venire mai
+// nemmeno tentati. Distribuiamo invece il tetto equamente: un programma
+// per canale a turno (round-robin), finché non si raggiunge il tetto o si
+// esauriscono tutti i canali — così ogni canale ha sempre una possibilità,
+// anche quando il tetto è molto più basso del totale dei programmi.
+function selectIndicesToTranslate(programs, cap) {
+  const byChannel = new Map();
+  programs.forEach((p, i) => {
+    if (!byChannel.has(p.tvg_id)) byChannel.set(p.tvg_id, []);
+    byChannel.get(p.tvg_id).push(i);
+  });
+  const queues = [...byChannel.values()];
+  const selected = new Set();
+  let round = 0;
+  while (selected.size < cap) {
+    let addedThisRound = false;
+    for (const queue of queues) {
+      if (selected.size >= cap) break;
+      if (queue[round] !== undefined) {
+        selected.add(queue[round]);
+        addedThisRound = true;
+      }
+    }
+    if (!addedThisRound) break; // tutte le code esaurite, niente altro da aggiungere
+    round++;
+  }
+  return selected;
+}
 
 // format: 'ts' (default, via acexy — multiplexing multi-client, consigliato
 // per la maggior parte dei player) oppure 'hls' (via l'endpoint nativo
@@ -83,31 +116,22 @@ async function buildXmltv() {
     // player IPTV ripescano l'EPG spesso) recuperino gradualmente i titoli
     // già tradotti, senza costo aggiuntivo.
     //
-    // Se "Lingua sorgente EPG" è impostata esplicitamente, traduce TUTTO
-    // (anche testo già in alfabeto latino). Se lasciata su "Auto", resta
-    // il comportamento sicuro di sempre: solo alfabeti non latini,
-    // rilevati euristicamente — indovinare la lingua sorgente tra le tante
-    // varianti europee sarebbe troppo inaffidabile senza una dichiarazione
-    // esplicita dell'utente.
+    // La lingua sorgente viene rilevata per singola stringa (vedi
+    // translator.js: range Unicode per alfabeti non latini, altrimenti
+    // rilevamento statistico per il latino) — non c'è una "lingua sorgente
+    // dell'EPG" unica da dichiarare, dato che le fonti configurate possono
+    // essere in lingue diverse mescolate tra loro.
     const epgLanguage = getSetting('epg_language', '');
-    const epgSourceLanguage = getSetting('epg_source_language', '');
     const MAX_XMLTV_TRANSLATIONS_PER_REQUEST = 150;
 
     let titles = programs.map((p) => p.title);
     if (epgLanguage) {
-      let translationAttempts = 0;
       // Traduzioni in parallelo (Promise.all), non in sequenza: con centinaia
       // di programmi da controllare, farle una alla volta renderebbe questa
       // richiesta troppo lenta per un player IPTV che interroga /epg.xml.
+      const indicesToTranslate = selectIndicesToTranslate(programs, MAX_XMLTV_TRANSLATIONS_PER_REQUEST);
       titles = await Promise.all(
-        programs.map(async (p) => {
-          const shouldAttempt = epgSourceLanguage || guessSourceLang(p.title);
-          if (shouldAttempt && translationAttempts < MAX_XMLTV_TRANSLATIONS_PER_REQUEST) {
-            translationAttempts += 1;
-            return translateText(p.title, epgLanguage, epgSourceLanguage || undefined);
-          }
-          return p.title;
-        })
+        programs.map((p, i) => (indicesToTranslate.has(i) ? translateText(p.title, epgLanguage) : p.title))
       );
     }
 
