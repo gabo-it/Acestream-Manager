@@ -170,6 +170,32 @@ acestream://0123456789abcdef0123456789abcdef01234567"
     <p class="text-xs text-slate-500 mt-1"><%= t('settings.libretranslate_url_help') %></p>
   </div>
 
+  <div class="space-y-2">
+    <label class="flex items-start gap-2 text-sm">
+      <input type="checkbox" name="epg_translate_ui" <%= epgTranslateUi ? 'checked' : '' %>
+             class="mt-1 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" />
+      <span>
+        <span class="text-slate-300"><%= t('settings.epg_translate_ui_label') %></span><br/>
+        <span class="text-xs text-slate-500"><%= t('settings.epg_translate_ui_help') %></span>
+      </span>
+    </label>
+    <label class="flex items-start gap-2 text-sm">
+      <input type="checkbox" name="epg_translate_xml" <%= epgTranslateXml ? 'checked' : '' %>
+             class="mt-1 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" />
+      <span>
+        <span class="text-slate-300"><%= t('settings.epg_translate_xml_label') %></span><br/>
+        <span class="text-xs text-amber-400"><%= t('settings.epg_translate_xml_help') %></span>
+      </span>
+    </label>
+
+    <div class="ml-6">
+      <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_translate_days_label') %></label>
+      <input type="number" name="epg_translate_days" value="<%= epgTranslateDays || '2' %>" min="1" max="14"
+             class="w-24 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500" />
+      <p class="text-xs text-amber-400 mt-1"><%= t('settings.epg_translate_days_help') %></p>
+    </div>
+  </div>
+
   <div class="flex gap-3">
     <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
       <%= t('settings.save') %>

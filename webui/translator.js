@@ -51,7 +51,7 @@ async function translateText(text, targetLang) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ q: text, source: 'auto', target: targetLang, format: 'text' }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) {
       const errBody = await res.text().catch(() => '');
@@ -107,7 +107,7 @@ async function translateBatch(texts, targetLang) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ q: toTranslate.map((t) => t.text), source: 'auto', target: targetLang, format: 'text' }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
     if (!res.ok) {
       const errBody = await res.text().catch(() => '');

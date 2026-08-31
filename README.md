@@ -48,7 +48,7 @@ CRUD, search, bulk select/delete · online/offline status check (single or all a
 AceStream's own search API with category filtering — select and bulk-import results with one click, same playback options as regular channels
 
 ### 📅 EPG
-Auto-import from XMLTV sources, configurable refresh interval · keeps the last good guide if any source fails or hits a rate limit · expandable daily schedule per channel with previous/next-day navigation · optional program-title translation (Italian/English/French/Spanish) via a self-hosted [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) instance you point the stack at — no third-party service involved, off by default
+Auto-import from XMLTV sources, configurable refresh interval · keeps the last good guide if any source fails or hits a rate limit · expandable daily schedule per channel with previous/next-day navigation · optional program-title translation (Italian/English/French/Spanish) via a self-hosted [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) instance you point the stack at — no third-party service involved, off by default; separate toggles for web UI translation (light) and the /epg.xml export (can be CPU-heavy on large guides)
 
 ### 📃 Playlists
 Two auto-generated variants: MPEG-TS via acexy (recommended, multi-client) and HLS via the native engine endpoint (experimental)
@@ -387,7 +387,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v2.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v2.1-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

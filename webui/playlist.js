@@ -1,6 +1,7 @@
 const { db, getSetting } = require('./db');
 const { getEngineParams } = require('./engineConfig');
 const { translateBatch } = require('./translator');
+const { getTranslationWindowBounds } = require('./epg');
 
 // format: 'ts' (default, via acexy — multiplexing multi-client, consigliato
 // per la maggior parte dei player) oppure 'hls' (via l'endpoint nativo
@@ -74,17 +75,48 @@ async function buildXmltv() {
       .all(...tvgIds);
 
     // Traduce i titoli (non le descrizioni, per contenere il volume) nella
-    // lingua guida scelta in Impostazioni. La maggior parte dei titoli è
-    // già in cache grazie alla traduzione in blocco eseguita in background
-    // ad ogni aggiornamento EPG (vedi epg.js) — qui translateBatch chiama
+    // lingua guida scelta in Impostazioni, se la checkbox "Traduci
+    // /epg.xml" è attiva — separata dalla checkbox usata dalla webui,
+    // perché questo export può coprire l'intero archivio EPG (a differenza
+    // della lista canali o del pannello Programmazione, sempre naturalmente
+    // piccoli), quindi molto più pesante lato CPU per LibreTranslate su
+    // guide lunghe.
+    //
+    // Limitata alla finestra di N giorni ("Giorni da tradurre") — i
+    // programmi oltre la finestra restano nella lingua originale (ma
+    // compaiono comunque nell'export, non vengono esclusi): tradurli
+    // sarebbe carico CPU per contenuto che l'utente vedrà solo tra
+    // giorni. La finestra si "rinnova" da sola col passare del tempo, ad
+    // ogni richiesta.
+    //
+    // La maggior parte dei titoli nella finestra è comunque già in cache
+    // grazie alla traduzione in blocco eseguita in background ad ogni
+    // aggiornamento EPG (vedi epg.js) — qui translateBatch chiama
     // LibreTranslate solo per gli eventuali titoli non ancora coperti, in
     // un'unica richiesta HTTP con tutti insieme (supporto nativo agli
-    // array, vedi translator.js). Nessun tetto artificiale: con
-    // LibreTranslate self-hosted non c'è quota esterna da proteggere.
+    // array, vedi translator.js).
     const epgLanguage = getSetting('epg_language', '');
-    const titles = epgLanguage
-      ? await translateBatch(programs.map((p) => p.title), epgLanguage)
-      : programs.map((p) => p.title);
+    const titles = programs.map((p) => p.title);
+    if (epgLanguage && getSetting('epg_translate_xml', '1') === '1') {
+      const days = Math.max(1, Math.min(14, parseInt(getSetting('epg_translate_days', '2'), 10) || 2));
+      const { start, end } = getTranslationWindowBounds(days);
+
+      const inWindowIndices = [];
+      const inWindowTitles = [];
+      programs.forEach((p, i) => {
+        if (p.stop_ts > start && p.start_ts < end) {
+          inWindowIndices.push(i);
+          inWindowTitles.push(p.title);
+        }
+      });
+
+      if (inWindowTitles.length > 0) {
+        const translated = await translateBatch(inWindowTitles, epgLanguage);
+        inWindowIndices.forEach((idx, j) => {
+          titles[idx] = translated[j];
+        });
+      }
+    }
 
     programs.forEach((p, i) => {
       out += `  <programme start="${toXmltvTime(p.start_ts)}" stop="${toXmltvTime(p.stop_ts)}" channel="${xmlEscape(

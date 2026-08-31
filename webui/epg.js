@@ -64,12 +64,61 @@ async function fetchXmltv(url) {
 // l'aggiornamento EPG programmato, non blocca nessuna richiesta di un
 // client reale.
 //
+// Legato specificamente alla checkbox "Traduci /epg.xml" (non a quella
+// della webui): questo job esiste per alleggerire proprio quell'export,
+// l'unico che può coprire l'intero archivio EPG — se quella traduzione è
+// disattivata, non ha senso fare comunque tutto questo lavoro CPU-intensivo
+// in background. La checkbox della webui, invece, copre percorsi
+// naturalmente piccoli (pochi canali visibili, un canale/giorno alla
+// volta) che se ne fanno benissimo a meno di questa pre-cache in blocco.
+//
 // Con LibreTranslate self-hosted non c'è più una quota esterna da
 // proteggere (a differenza del servizio usato in precedenza) — quindi
 // niente più tetto artificiale né selezione round-robin: tutti i titoli
 // distinti dei canali configurati vengono processati, in blocchi
 // ragionevoli per singola richiesta HTTP (solo per affidabilità, non per
 // quota). translateBatch salta da solo i titoli già in cache.
+//
+// Calcola i confini [inizio, fine) della finestra di traduzione, in
+// giorni di calendario (mezzanotte UTC, non ore da "adesso") — così la
+// finestra si "rinnova" naturalmente ad ogni mezzanotte, coprendo sempre
+// "oggi + N giorni" invece di un conteggio di ore che scivolerebbe in
+// modo meno intuitivo. Un programma che è a cavallo di mezzanotte (es.
+// inizia alle 23:30 di ieri) è comunque incluso, perché controlliamo che
+// FINISCA dopo l'inizio della finestra, non che INIZI dopo.
+function getTranslationWindowBounds(days) {
+  const now = new Date();
+  const startOfToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const end = startOfToday + Math.max(1, days) * 24 * 60 * 60 * 1000;
+  return { start: startOfToday, end };
+}
+
+// Traduce in blocco i titoli distinti dei programmi appena importati,
+// invece di lasciare che siano i percorsi live (/epg.xml, pannello
+// Programmazione) a tradurre "al volo". Girando qui, in background durante
+// l'aggiornamento EPG programmato, non blocca nessuna richiesta di un
+// client reale.
+//
+// Legato specificamente alla checkbox "Traduci /epg.xml" (non a quella
+// della webui): questo job esiste per alleggerire proprio quell'export,
+// l'unico che può coprire l'intero archivio EPG — se quella traduzione è
+// disattivata, non ha senso fare comunque tutto questo lavoro CPU-intensivo
+// in background. La checkbox della webui, invece, copre percorsi
+// naturalmente piccoli (pochi canali visibili, un canale/giorno alla
+// volta) che se ne fanno benissimo a meno di questa pre-cache in blocco.
+//
+// Limitata a una finestra di N giorni di calendario (impostazione
+// "Giorni da tradurre"): con guide EPG che coprono molti giorni futuri,
+// tradurre tutto sarebbe un carico CPU inutile per contenuto che
+// l'utente vedrà solo tra giorni — la finestra si "rinnova" da sola ad
+// ogni ciclo di aggiornamento EPG, man mano che il tempo passa.
+//
+// Con LibreTranslate self-hosted non c'è più una quota esterna da
+// proteggere (a differenza del servizio usato in precedenza) — quindi
+// niente più tetto artificiale né selezione round-robin: tutti i titoli
+// distinti nella finestra vengono processati, in blocchi ragionevoli per
+// singola richiesta HTTP (solo per affidabilità, non per quota).
+// translateBatch salta da solo i titoli già in cache.
 //
 // Ci limitiamo ai tvg_id dei canali effettivamente configurati (stessa
 // logica di buildXmltv in playlist.js) — una fonte EPG può contenere
@@ -79,18 +128,25 @@ async function fetchXmltv(url) {
 async function translateProgramTitlesInBackground() {
   const epgLanguage = getSetting('epg_language', '');
   if (!epgLanguage || !getLibreTranslateUrl()) return; // traduzione EPG disattivata
+  if (getSetting('epg_translate_xml', '1') !== '1') return; // export XML non tradotto: niente da pre-cacheare
 
   const channelTvgIds = db.prepare("SELECT DISTINCT tvg_id FROM channels WHERE tvg_id != ''").all().map((r) => r.tvg_id);
   if (channelTvgIds.length === 0) return; // nessun canale con tvg_id configurato
   const placeholders = channelTvgIds.map(() => '?').join(',');
 
+  const days = Math.max(1, Math.min(14, parseInt(getSetting('epg_translate_days', '2'), 10) || 2));
+  const { start, end } = getTranslationWindowBounds(days);
+
   const titles = db
-    .prepare(`SELECT DISTINCT title FROM programs WHERE tvg_id IN (${placeholders})`)
-    .all(...channelTvgIds)
+    .prepare(`SELECT DISTINCT title FROM programs WHERE tvg_id IN (${placeholders}) AND stop_ts > ? AND start_ts < ?`)
+    .all(...channelTvgIds, start, end)
     .map((r) => r.title);
   if (titles.length === 0) return;
 
-  const BATCH_SIZE = 50;
+  // Blocchi più piccoli = ogni singola richiesta HTTP ha meno testo da
+  // processare, riducendo il rischio di timeout su hardware più lento
+  // (la traduzione neurale via CPU può richiedere tempo reale per blocco).
+  const BATCH_SIZE = 20;
   let processed = 0;
   for (let i = 0; i < titles.length; i += BATCH_SIZE) {
     const chunk = titles.slice(i, i + BATCH_SIZE);
@@ -241,4 +297,4 @@ function getProgramsForDay(tvgId, dateStr) {
     .all(tvgId, dayEnd, dayStart);
 }
 
-module.exports = { refreshEpg, getNowNext, getProgramsForDay };
+module.exports = { refreshEpg, getNowNext, getProgramsForDay, getTranslationWindowBounds };

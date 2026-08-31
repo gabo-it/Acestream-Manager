@@ -80,13 +80,14 @@ app.get('/', async (req, res) => {
   }
 
   // Traduce i titoli "in onda ora" / "a seguire" mostrati nella lista
-  // canali, se una lingua guida è impostata in Sorgenti. Grazie alla
-  // traduzione in blocco già eseguita in background ad ogni aggiornamento
-  // EPG (vedi epg.js), la stragrande maggioranza di questi titoli sono
-  // già in cache — non richiedono una vera chiamata all'API di traduzione
-  // ad ogni caricamento di questa pagina, solo una lettura dalla cache.
+  // canali, se una lingua guida è impostata E la checkbox "Traduci nella
+  // webui" è attiva in Sorgenti. Grazie alla traduzione in blocco già
+  // eseguita in background ad ogni aggiornamento EPG (vedi epg.js), la
+  // stragrande maggioranza di questi titoli sono già in cache — non
+  // richiedono una vera chiamata all'API di traduzione ad ogni caricamento
+  // di questa pagina, solo una lettura dalla cache.
   const epgLanguage = getSetting('epg_language', '');
-  if (epgLanguage) {
+  if (epgLanguage && getSetting('epg_translate_ui', '1') === '1') {
     const flatTitles = [];
     const refs = [];
     for (const epg of Object.values(epgByChannel)) {
@@ -206,13 +207,16 @@ app.get('/channels/:id/schedule', async (req, res) => {
   }));
 
   // Traduce i titoli (in parallelo, tramite LibreTranslate) nella lingua
-  // guida scelta in Impostazioni, se impostata — stessa funzione usata
-  // anche dalla lista canali e dall'export /epg.xml. Nessuna lingua
-  // sorgente da dichiarare: LibreTranslate la rileva da solo per ogni
-  // stringa (utile perché le fonti configurate possono essere in lingue
-  // diverse mescolate tra loro).
+  // guida scelta in Impostazioni, se impostata E la checkbox "Traduci
+  // nella webui" è attiva — stessa checkbox e stessa funzione della lista
+  // canali, dato che entrambe restano naturalmente piccole (pochi canali
+  // visibili o un canale/giorno alla volta), a differenza dell'export
+  // /epg.xml che può coprire l'intero archivio. Nessuna lingua sorgente da
+  // dichiarare: LibreTranslate la rileva da solo per ogni stringa (utile
+  // perché le fonti configurate possono essere in lingue diverse
+  // mescolate tra loro).
   const epgLanguage = getSetting('epg_language', '');
-  if (epgLanguage && programs.length) {
+  if (epgLanguage && programs.length && getSetting('epg_translate_ui', '1') === '1') {
     try {
       const translatedTitles = await translateBatch(programs.map((p) => p.title), epgLanguage);
       programs = programs.map((p, i) => ({ ...p, title: translatedTitles[i] }));
@@ -393,6 +397,14 @@ app.get('/sources', (req, res) => {
     epgLastResult: getSetting('epg_last_result', ''),
     epgLanguage: getSetting('epg_language', ''),
     libretranslateUrl: getSetting('libretranslate_url', ''),
+    // Default "1" (attivo) per entrambe: chi imposta una lingua guida per
+    // la prima volta si aspetta che faccia qualcosa, senza dover scoprire
+    // due checkbox nascoste. Chi ha un EPG molto grande e vuole evitare il
+    // costo CPU può disattivare quella dell'export in un secondo momento,
+    // con l'avviso ben visibile accanto al campo.
+    epgTranslateUi: getSetting('epg_translate_ui', '1') === '1',
+    epgTranslateXml: getSetting('epg_translate_xml', '1') === '1',
+    epgTranslateDays: getSetting('epg_translate_days', '2'),
   });
 });
 
@@ -409,6 +421,15 @@ app.post('/sources/epg', (req, res) => {
   const url = (req.body.libretranslate_url || '').trim();
   const validUrl = /^https?:\/\/.+/.test(url);
   setSetting('libretranslate_url', validUrl ? url : '');
+  // Tra 1 e 14 giorni: un limite superiore di sicurezza, non un valore
+  // consigliato — la nota nell'interfaccia avverte di scegliere con
+  // attenzione in base a hardware disponibile e velocità di LibreTranslate.
+  const days = Math.max(1, Math.min(14, parseInt(req.body.epg_translate_days, 10) || 2));
+  setSetting('epg_translate_days', String(days));
+  // Checkbox HTML: presenti nel body solo se spuntate, quindi la loro
+  // assenza in req.body significa "disattivata", non "campo mancante".
+  setSetting('epg_translate_ui', req.body.epg_translate_ui ? '1' : '0');
+  setSetting('epg_translate_xml', req.body.epg_translate_xml ? '1' : '0');
   scheduleEpgRefresh();
   res.redirect('/sources');
 });
