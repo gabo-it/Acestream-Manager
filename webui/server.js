@@ -205,14 +205,12 @@ app.get('/channels/:id/schedule', async (req, res) => {
     stop: p.stop_ts,
   }));
 
-  // Traduce i titoli (in parallelo) nella lingua guida scelta in
-  // Impostazioni, se impostata — solo qui (non nella lista canali) per non
-  // rallentare il caricamento principale con molte chiamate all'API di
-  // traduzione. La lingua sorgente viene rilevata per singola stringa
-  // (vedi translator.js: range Unicode per alfabeti non latini, altrimenti
-  // rilevamento statistico per il latino) — non c'è una "lingua sorgente
-  // dell'EPG" unica da dichiarare, dato che le fonti configurate possono
-  // essere in lingue diverse mescolate tra loro.
+  // Traduce i titoli (in parallelo, tramite LibreTranslate) nella lingua
+  // guida scelta in Impostazioni, se impostata — stessa funzione usata
+  // anche dalla lista canali e dall'export /epg.xml. Nessuna lingua
+  // sorgente da dichiarare: LibreTranslate la rileva da solo per ogni
+  // stringa (utile perché le fonti configurate possono essere in lingue
+  // diverse mescolate tra loro).
   const epgLanguage = getSetting('epg_language', '');
   if (epgLanguage && programs.length) {
     try {
@@ -394,6 +392,7 @@ app.get('/sources', (req, res) => {
     epgRefreshHours: getSetting('epg_refresh_hours', '6'),
     epgLastResult: getSetting('epg_last_result', ''),
     epgLanguage: getSetting('epg_language', ''),
+    libretranslateUrl: getSetting('libretranslate_url', ''),
   });
 });
 
@@ -403,6 +402,13 @@ app.post('/sources/epg', (req, res) => {
   setSetting('epg_refresh_hours', String(hours));
   const allowedLangs = new Set(['', 'it', 'en', 'fr', 'es']);
   setSetting('epg_language', allowedLangs.has(req.body.epg_language) ? req.body.epg_language : '');
+  // Validazione minimale: solo per evitare di salvare valori palesemente
+  // non validi (es. testo libero), non una verifica di raggiungibilità
+  // reale — quella la scopriamo comunque al primo tentativo di traduzione.
+  // Campo facoltativo: vuoto = traduzione EPG disattivata.
+  const url = (req.body.libretranslate_url || '').trim();
+  const validUrl = /^https?:\/\/.+/.test(url);
+  setSetting('libretranslate_url', validUrl ? url : '');
   scheduleEpgRefresh();
   res.redirect('/sources');
 });

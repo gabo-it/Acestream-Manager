@@ -11,7 +11,7 @@ Create a `docker-compose.yml` with the content below, adjust any values directly
 ```yaml
 services:
   acestream:
-    image: gaboita/acestream-engine:latest
+    image: ghcr.io/gabo-it/acestream-engine:latest
     container_name: acestream-engine
     restart: unless-stopped
     environment:
@@ -59,7 +59,7 @@ services:
       - acestream-net
 
   webui:
-    image: gaboita/acestream-webui:latest
+    image: ghcr.io/gabo-it/acestream-webui:latest
     container_name: acestream-webui
     restart: unless-stopped
     depends_on:
@@ -81,14 +81,36 @@ services:
     networks:
       - acestream-net
 
+  # Optional: self-hosted translation engine for EPG program-title
+  # translation and cross-alphabet tvg-id/logo matching — no third-party
+  # service, everything stays on your own hardware. Disabled by default;
+  # start it alongside the rest with: docker compose --profile translate up -d
+  # Once running, set Sources → "LibreTranslate URL" to http://libretranslate:5000
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: libretranslate
+    restart: unless-stopped
+    profiles: ["translate"]
+    environment:
+      # Loads only these languages (~200MB RAM each) instead of all 30+
+      # (several GB) — adjust to your EPG sources' actual languages.
+      LT_LOAD_ONLY: en,it,fr,es,ru,de,pl,pt,tr
+    volumes:
+      - libretranslate-models:/home/libretranslate/.local
+    networks:
+      - acestream-net
+
 networks:
   acestream-net:
     driver: bridge
 
 volumes:
   webui-data:
+  libretranslate-models:
 
 ```
+
+`docker compose up -d` alone starts the three core services — `libretranslate` is a separate [profile](https://docs.docker.com/compose/how-tos/profiles/) and stays off unless requested: `docker compose --profile translate up -d`. Only needed for optional EPG translation / cross-alphabet channel matching; self-hosted, no third-party service involved.
 
 ## 🔗 Full project
 

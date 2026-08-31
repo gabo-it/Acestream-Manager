@@ -163,6 +163,13 @@ acestream://0123456789abcdef0123456789abcdef01234567"
     <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_language_help') %></p>
   </div>
 
+  <div>
+    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.libretranslate_url_label') %></label>
+    <input type="url" name="libretranslate_url" value="<%= libretranslateUrl || '' %>" placeholder="http://192.168.1.50:5000"
+           class="w-80 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500" />
+    <p class="text-xs text-slate-500 mt-1"><%= t('settings.libretranslate_url_help') %></p>
+  </div>
+
   <div class="flex gap-3">
     <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
       <%= t('settings.save') %>

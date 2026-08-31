@@ -1,39 +1,6 @@
 const { db, getSetting } = require('./db');
 const { getEngineParams } = require('./engineConfig');
-const { translateText } = require('./translator');
-
-// Con un tetto fisso e molti canali, prendere semplicemente i primi N
-// programmi in ordine cronologico GLOBALE (su tutti i canali insieme)
-// rischia di lasciare fuori interi canali, se i loro programmi cadono
-// sempre oltre la posizione N — es. con 3500+ programmi su decine di
-// canali e un tetto di 150, alcuni canali potrebbero non venire mai
-// nemmeno tentati. Distribuiamo invece il tetto equamente: un programma
-// per canale a turno (round-robin), finché non si raggiunge il tetto o si
-// esauriscono tutti i canali — così ogni canale ha sempre una possibilità,
-// anche quando il tetto è molto più basso del totale dei programmi.
-function selectIndicesToTranslate(programs, cap) {
-  const byChannel = new Map();
-  programs.forEach((p, i) => {
-    if (!byChannel.has(p.tvg_id)) byChannel.set(p.tvg_id, []);
-    byChannel.get(p.tvg_id).push(i);
-  });
-  const queues = [...byChannel.values()];
-  const selected = new Set();
-  let round = 0;
-  while (selected.size < cap) {
-    let addedThisRound = false;
-    for (const queue of queues) {
-      if (selected.size >= cap) break;
-      if (queue[round] !== undefined) {
-        selected.add(queue[round]);
-        addedThisRound = true;
-      }
-    }
-    if (!addedThisRound) break; // tutte le code esaurite, niente altro da aggiungere
-    round++;
-  }
-  return selected;
-}
+const { translateBatch } = require('./translator');
 
 // format: 'ts' (default, via acexy — multiplexing multi-client, consigliato
 // per la maggior parte dei player) oppure 'hls' (via l'endpoint nativo
@@ -106,34 +73,18 @@ async function buildXmltv() {
       .prepare(`SELECT * FROM programs WHERE tvg_id IN (${placeholders}) ORDER BY start_ts`)
       .all(...tvgIds);
 
-    // Traduce i titoli (non le descrizioni, per contenere il volume di
-    // chiamate) nella lingua guida scelta in Impostazioni, con un tetto
-    // massimo di traduzioni per singola richiesta: un export EPG completo
-    // può contenere migliaia di programmi, e tradurli tutti ad ogni
-    // richiesta esaurirebbe la quota gratuita dell'API in un colpo solo.
-    // Oltre il tetto, i titoli restano nella lingua originale per QUESTA
-    // richiesta — la cache (SQLite) fa sì che le richieste successive (i
-    // player IPTV ripescano l'EPG spesso) recuperino gradualmente i titoli
-    // già tradotti, senza costo aggiuntivo.
-    //
-    // La lingua sorgente viene rilevata per singola stringa (vedi
-    // translator.js: range Unicode per alfabeti non latini, altrimenti
-    // rilevamento statistico per il latino) — non c'è una "lingua sorgente
-    // dell'EPG" unica da dichiarare, dato che le fonti configurate possono
-    // essere in lingue diverse mescolate tra loro.
+    // Traduce i titoli (non le descrizioni, per contenere il volume) nella
+    // lingua guida scelta in Impostazioni. La maggior parte dei titoli è
+    // già in cache grazie alla traduzione in blocco eseguita in background
+    // ad ogni aggiornamento EPG (vedi epg.js) — qui translateBatch chiama
+    // LibreTranslate solo per gli eventuali titoli non ancora coperti, in
+    // un'unica richiesta HTTP con tutti insieme (supporto nativo agli
+    // array, vedi translator.js). Nessun tetto artificiale: con
+    // LibreTranslate self-hosted non c'è quota esterna da proteggere.
     const epgLanguage = getSetting('epg_language', '');
-    const MAX_XMLTV_TRANSLATIONS_PER_REQUEST = 150;
-
-    let titles = programs.map((p) => p.title);
-    if (epgLanguage) {
-      // Traduzioni in parallelo (Promise.all), non in sequenza: con centinaia
-      // di programmi da controllare, farle una alla volta renderebbe questa
-      // richiesta troppo lenta per un player IPTV che interroga /epg.xml.
-      const indicesToTranslate = selectIndicesToTranslate(programs, MAX_XMLTV_TRANSLATIONS_PER_REQUEST);
-      titles = await Promise.all(
-        programs.map((p, i) => (indicesToTranslate.has(i) ? translateText(p.title, epgLanguage) : p.title))
-      );
-    }
+    const titles = epgLanguage
+      ? await translateBatch(programs.map((p) => p.title), epgLanguage)
+      : programs.map((p) => p.title);
 
     programs.forEach((p, i) => {
       out += `  <programme start="${toXmltvTime(p.start_ts)}" stop="${toXmltvTime(p.stop_ts)}" channel="${xmlEscape(

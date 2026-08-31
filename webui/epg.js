@@ -1,6 +1,6 @@
 const { XMLParser } = require('fast-xml-parser');
 const { db, getSetting, setSetting } = require('./db');
-const { translateText } = require('./translator');
+const { translateBatch, getLibreTranslateUrl } = require('./translator');
 
 // I limiti di espansione entità di default (introdotti da fast-xml-parser
 // come protezione contro attacchi XML entity-bomb) sono pensati per input
@@ -60,95 +60,45 @@ async function fetchXmltv(url) {
 
 // Traduce in blocco i titoli distinti dei programmi appena importati,
 // invece di lasciare che siano i percorsi live (/epg.xml, pannello
-// Programmazione) a tradurre "al volo" con un tetto basso per non
-// rallentare la risposta. Girando qui, in background durante
+// Programmazione) a tradurre "al volo". Girando qui, in background durante
 // l'aggiornamento EPG programmato, non blocca nessuna richiesta di un
-// client reale — possiamo permetterci di processare molti più titoli.
+// client reale.
 //
-// Selezione round-robin PER CANALE (non semplicemente i primi N titoli
-// distinti "globali" nell'ordine restituito da SQLite): con un EPG grande
-// (migliaia di titoli distinti su decine di canali), prendere solo i
-// primi N senza equità rischia di lasciare interi canali sempre esclusi,
-// se i loro titoli capitano oltre la posizione N — lo stesso bug già
-// risolto per /epg.xml, riproposto qui per distrazione la prima volta.
+// Con LibreTranslate self-hosted non c'è più una quota esterna da
+// proteggere (a differenza del servizio usato in precedenza) — quindi
+// niente più tetto artificiale né selezione round-robin: tutti i titoli
+// distinti dei canali configurati vengono processati, in blocchi
+// ragionevoli per singola richiesta HTTP (solo per affidabilità, non per
+// quota). translateBatch salta da solo i titoli già in cache.
+//
+// Ci limitiamo ai tvg_id dei canali effettivamente configurati (stessa
+// logica di buildXmltv in playlist.js) — una fonte EPG può contenere
+// migliaia di canali mai collegati a nessun canale dello stack: tradurli
+// sarebbe lavoro sprecato su contenuto che non comparirà mai in
+// /epg.xml o nella webui.
 async function translateProgramTitlesInBackground() {
   const epgLanguage = getSetting('epg_language', '');
-  if (!epgLanguage) return; // nessuna lingua di destinazione impostata
+  if (!epgLanguage || !getLibreTranslateUrl()) return; // traduzione EPG disattivata
 
-  // Ci limitiamo ai tvg_id dei canali effettivamente configurati (stessa
-  // logica di buildXmltv in playlist.js) — una fonte EPG può contenere
-  // migliaia di canali mai collegati a nessun canale dello stack:
-  // tradurli sarebbe budget sprecato su contenuto che non comparirà mai
-  // in /epg.xml o nella webui.
   const channelTvgIds = db.prepare("SELECT DISTINCT tvg_id FROM channels WHERE tvg_id != ''").all().map((r) => r.tvg_id);
   if (channelTvgIds.length === 0) return; // nessun canale con tvg_id configurato
   const placeholders = channelTvgIds.map(() => '?').join(',');
 
-  const rows = db
-    .prepare(`SELECT DISTINCT tvg_id, title FROM programs WHERE tvg_id IN (${placeholders})`)
-    .all(...channelTvgIds);
+  const titles = db
+    .prepare(`SELECT DISTINCT title FROM programs WHERE tvg_id IN (${placeholders})`)
+    .all(...channelTvgIds)
+    .map((r) => r.title);
+  if (titles.length === 0) return;
 
-  // Escludiamo i titoli già presenti in cache per questa lingua di
-  // destinazione: altrimenti la selezione round-robin (deterministica)
-  // sceglierebbe sempre lo stesso primo blocco di titoli ad ogni ciclo —
-  // veloce da ripassare (cache hit), ma senza mai avanzare sui rimanenti.
-  // Filtrando qui, ogni aggiornamento EPG fa progressi reali, coprendo
-  // gradualmente l'intero EPG nel giro di pochi cicli invece di restare
-  // bloccato allo stesso sottoinsieme per sempre.
-  const cachedTitles = new Set(
-    db
-      .prepare('SELECT DISTINCT original FROM translation_cache WHERE langpair LIKE ?')
-      .all(`%|${epgLanguage}`)
-      .map((r) => r.original)
-  );
-  const uncachedRows = rows.filter((r) => !cachedTitles.has(r.title));
-
-  const byChannel = new Map();
-  for (const r of uncachedRows) {
-    if (!byChannel.has(r.tvg_id)) byChannel.set(r.tvg_id, []);
-    byChannel.get(r.tvg_id).push(r.title);
-  }
-  const queues = [...byChannel.values()];
-
-  // Tetto di sicurezza per singolo giro: qui gira in background, quindi
-  // molto più generoso dei tetti nei percorsi live — ma resta un tetto,
-  // per non rischiare di esaurire la quota gratuita dell'API con un EPG
-  // enorme in un colpo solo. La cache (SQLite) fa sì che i titoli già
-  // tradotti in un giro precedente vengano saltati automaticamente
-  // (translateText controlla la cache prima di chiamare l'API): i giri
-  // successivi (ad ogni aggiornamento EPG programmato) coprono
-  // gradualmente il resto — con EPG molto grandi, la copertura completa
-  // richiede più cicli, non un giro solo.
-  const MAX_BACKGROUND_TRANSLATIONS = 1000;
-  const toTranslate = [];
-  let round = 0;
-  while (toTranslate.length < MAX_BACKGROUND_TRANSLATIONS) {
-    let addedThisRound = false;
-    for (const queue of queues) {
-      if (toTranslate.length >= MAX_BACKGROUND_TRANSLATIONS) break;
-      if (queue[round] !== undefined) {
-        toTranslate.push(queue[round]);
-        addedThisRound = true;
-      }
-    }
-    if (!addedThisRound) break; // tutte le code esaurite
-    round++;
-  }
-
-  // Concorrenza limitata (10 alla volta) invece di tutte insieme: con
-  // centinaia/migliaia di richieste scagliate tutte in parallelo
-  // rischieremmo di essere limitati o bloccati dall'API di traduzione.
-  const CONCURRENCY = 10;
+  const BATCH_SIZE = 50;
   let processed = 0;
-  for (let i = 0; i < toTranslate.length; i += CONCURRENCY) {
-    const chunk = toTranslate.slice(i, i + CONCURRENCY);
-    await Promise.all(chunk.map((t) => translateText(t, epgLanguage)));
+  for (let i = 0; i < titles.length; i += BATCH_SIZE) {
+    const chunk = titles.slice(i, i + BATCH_SIZE);
+    await translateBatch(chunk, epgLanguage);
     processed += chunk.length;
   }
-  const alreadyCached = rows.length - uncachedRows.length;
   console.log(
-    `[epg] traduzione in background completata: ${processed} nuovi titoli processati questo giro ` +
-    `(${alreadyCached} già in cache, ${rows.length} distinti totali su ${channelTvgIds.length} canali)`
+    `[epg] traduzione in background completata: ${processed} titoli distinti processati su ${channelTvgIds.length} canali`
   );
 }
 

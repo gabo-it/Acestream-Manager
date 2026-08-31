@@ -48,7 +48,7 @@ CRUD, search, bulk select/delete · online/offline status check (single or all a
 AceStream's own search API with category filtering — select and bulk-import results with one click, same playback options as regular channels
 
 ### 📅 EPG
-Auto-import from XMLTV sources, configurable refresh interval · keeps the last good guide if a refresh fails or hits a rate limit · expandable daily schedule per channel with previous/next-day navigation · optional program-title translation (Italian/English/French/Spanish) for non-Latin alphabets
+Auto-import from XMLTV sources, configurable refresh interval · keeps the last good guide if any source fails or hits a rate limit · expandable daily schedule per channel with previous/next-day navigation · optional program-title translation (Italian/English/French/Spanish) via a self-hosted [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) instance you point the stack at — no third-party service involved, off by default
 
 ### 📃 Playlists
 Two auto-generated variants: MPEG-TS via acexy (recommended, multi-client) and HLS via the native engine endpoint (experimental)
@@ -163,17 +163,40 @@ services:
     networks:
       - acestream-net
 
+  # Optional: self-hosted translation engine for EPG program-title
+  # translation and cross-alphabet tvg-id/logo matching — no third-party
+  # service, everything stays on your own hardware. Disabled by default;
+  # start it alongside the rest with: docker compose --profile translate up -d
+  # Once running, set Sources → "LibreTranslate URL" to http://libretranslate:5000
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: libretranslate
+    restart: unless-stopped
+    profiles: ["translate"]
+    environment:
+      # Loads only these languages (~200MB RAM each) instead of all 30+
+      # (several GB) — adjust to your EPG sources' actual languages.
+      LT_LOAD_ONLY: en,it,fr,es,ru,de,pl,pt,tr
+    volumes:
+      - libretranslate-models:/home/libretranslate/.local
+    networks:
+      - acestream-net
+
 networks:
   acestream-net:
     driver: bridge
 
 volumes:
   webui-data:
+  libretranslate-models:
 ```
 
 - Web UI: http://localhost:4000
 - Playlist (TS, recommended): http://localhost:4000/playlist.m3u8
 - EPG XMLTV: http://localhost:4000/epg.xml
+
+> [!NOTE]
+> `docker compose up -d` alone starts the three core services only — `libretranslate` is a separate [profile](https://docs.docker.com/compose/how-tos/profiles/) and stays off unless you explicitly ask for it: `docker compose --profile translate up -d`. Needed only if you want EPG program-title translation or cross-alphabet tvg-id/logo matching (both optional features) — see "Setting up LibreTranslate" in the Troubleshooting section below.
 
 > [!NOTE]
 > The Engine tab reads current parameters straight from the engine container's own logs via the mounted Docker socket above — accurate, and no `.env` file needed. If you'd rather not grant socket access, remove that line; the tab then shows built-in defaults instead (harmless — you can still see and edit real values right here in the compose file).
@@ -238,6 +261,7 @@ Engine parameters (ports, bandwidth, cache, access token) live in `.env` — vie
 | `ACEXY_NO_RESPONSE_TIMEOUT` | `30s` | Raise if streams fail with "timeout awaiting response headers" |
 | `ACEXY_BUFFER_SIZE` | `4.2MiB` | Raise if playback is choppy vs. hitting the engine directly |
 | `ACEXY_CLIENT_EVICTION_TIMEOUT` | `10s` | Raise if brief player hiccups cause visible stutter |
+| `LIBRETRANSLATE_LANGUAGES` | `en,it,fr,es,ru,de,pl,pt,tr` | Only relevant with the optional `translate` profile — adjust to your EPG sources' actual languages (each adds ~200MB RAM) |
 
 In the web UI, **Settings** has the Acexy/engine public URLs (needed for playback links to work from other devices) and configuration export/import. **Sources** has EPG configuration (XMLTV URLs, refresh interval, program-guide translation language) alongside channel source management, since both are about keeping content fresh.
 
@@ -303,9 +327,25 @@ VLC doesn't register a `vlc://` protocol handler by default on any OS. This proj
 </details>
 
 <details>
+<summary>Setting up LibreTranslate for EPG/suggestion translation</summary>
+
+Not included in this stack — run it separately, then paste its URL into Sources → "LibreTranslate URL". Loading only the languages you actually need keeps RAM usage reasonable (roughly 200MB per language, per the project's own guidance) instead of the several GB required to load all 30+ supported languages:
+
+```bash
+docker run -d --name libretranslate --restart unless-stopped \
+  -p 5000:5000 \
+  -e LT_LOAD_ONLY=en,it,fr,es,ru,de,pl,pt,tr \
+  -v libretranslate-models:/home/libretranslate/.local \
+  libretranslate/libretranslate:latest
+```
+
+Adjust the language list to whatever your EPG sources actually use. First start downloads the models (a few minutes); subsequent starts are fast. Point the stack at `http://<host-ip>:5000` (or `http://libretranslate:5000` if you add it to this project's own `acestream-net` Docker network instead of running it standalone).
+</details>
+
+<details>
 <summary>tvg-id/logo suggestions don't find a match for a channel</summary>
 
-Cross-alphabet matching (e.g. a channel named in Latin script vs. an EPG entry in Cyrillic/Arabic/etc.) depends on a free translation API and can occasionally miss due to spelling variants. The **manual search box** inside the suggestion panel always works regardless — type any part of the name in any alphabet and pick directly from the imported EPG.
+Cross-alphabet matching (e.g. a channel named in Latin script vs. an EPG entry in Cyrillic/Arabic/etc.) requires a LibreTranslate URL configured in Sources — without one, only same-alphabet matches are attempted. Even configured, it can occasionally miss due to spelling variants. The **manual search box** inside the suggestion panel always works regardless — type any part of the name in any alphabet and pick directly from the imported EPG.
 </details>
 
 <details>
@@ -347,7 +387,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v1.5-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v2.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

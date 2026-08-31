@@ -100,9 +100,38 @@ services:
     networks:
       - acestream-net
 
+  # Optional: self-hosted translation engine for EPG program-title
+  # translation and cross-alphabet tvg-id/logo matching — no third-party
+  # service involved, everything stays on your own hardware. Disabled by
+  # default; start it explicitly alongside the rest of the stack with:
+  #   docker compose --profile translate up -d
+  # Once it's running, go to Sources → "LibreTranslate URL" in the web UI
+  # and set it to: http://libretranslate:5000
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: libretranslate
+    restart: unless-stopped
+    profiles: ["translate"]
+    environment:
+      # Loads only the languages you actually need — each one costs
+      # roughly 200MB of RAM (per LibreTranslate's own sizing guidance).
+      # Loading all 30+ supported languages instead needs several GB.
+      # Defaults below cover this project's four target languages
+      # (it, en, fr, es) plus common EPG source languages — adjust the
+      # list to match whatever your own EPG guides actually use.
+      LT_LOAD_ONLY: "${LIBRETRANSLATE_LANGUAGES:-en,it,fr,es,ru,de,pl,pt,tr}"
+    volumes:
+      # Caches downloaded language models so they persist across
+      # restarts — without this, every restart re-downloads them (can
+      # take several minutes depending on how many languages are loaded).
+      - libretranslate-models:/home/libretranslate/.local
+    networks:
+      - acestream-net
+
 networks:
   acestream-net:
     driver: bridge
 
 volumes:
   webui-data:
+  libretranslate-models:
