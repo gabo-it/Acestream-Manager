@@ -94,18 +94,18 @@ function getTranslationWindowBounds(days) {
 }
 
 // Traduce in blocco i titoli distinti dei programmi appena importati,
-// invece di lasciare che siano i percorsi live (/epg.xml, pannello
-// Programmazione) a tradurre "al volo". Girando qui, in background durante
-// l'aggiornamento EPG programmato, non blocca nessuna richiesta di un
-// client reale.
+// invece di lasciare che siano i percorsi live (/epg.xml, lista canali,
+// pannello Programmazione) a tradurre "al volo". Girando qui, in
+// background durante l'aggiornamento EPG programmato, non blocca nessuna
+// richiesta di un client reale — è l'UNICO punto in cui avvengono vere
+// chiamate di rete a LibreTranslate: i percorsi live leggono sempre e
+// solo dalla cache che questo job popola (vedi getCachedTranslations in
+// translator.js).
 //
-// Legato specificamente alla checkbox "Traduci /epg.xml" (non a quella
-// della webui): questo job esiste per alleggerire proprio quell'export,
-// l'unico che può coprire l'intero archivio EPG — se quella traduzione è
-// disattivata, non ha senso fare comunque tutto questo lavoro CPU-intensivo
-// in background. La checkbox della webui, invece, copre percorsi
-// naturalmente piccoli (pochi canali visibili, un canale/giorno alla
-// volta) che se ne fanno benissimo a meno di questa pre-cache in blocco.
+// Gira se ALMENO UNA delle due checkbox è attiva ("Traduci nella webui"
+// o "Traduci /epg.xml") — entrambe dipendono dalla stessa cache. Se
+// nessuna delle due è attiva, non c'è nessuno che leggerebbe il
+// risultato: inutile fare comunque il lavoro CPU-intensivo.
 //
 // Limitata a una finestra di N giorni di calendario (impostazione
 // "Giorni da tradurre"): con guide EPG che coprono molti giorni futuri,
@@ -128,7 +128,9 @@ function getTranslationWindowBounds(days) {
 async function translateProgramTitlesInBackground() {
   const epgLanguage = getSetting('epg_language', '');
   if (!epgLanguage || !getLibreTranslateUrl()) return; // traduzione EPG disattivata
-  if (getSetting('epg_translate_xml', '1') !== '1') return; // export XML non tradotto: niente da pre-cacheare
+  const uiOn = getSetting('epg_translate_ui', '1') === '1';
+  const xmlOn = getSetting('epg_translate_xml', '1') === '1';
+  if (!uiOn && !xmlOn) return; // nessuno leggerebbe il risultato
 
   const channelTvgIds = db.prepare("SELECT DISTINCT tvg_id FROM channels WHERE tvg_id != ''").all().map((r) => r.tvg_id);
   if (channelTvgIds.length === 0) return; // nessun canale con tvg_id configurato

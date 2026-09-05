@@ -29,6 +29,24 @@ function getLibreTranslateUrl() {
   return (getSetting('libretranslate_url', '') || '').replace(/\/$/, '');
 }
 
+// Legge SOLO dalla cache, senza mai fare una chiamata di rete a
+// LibreTranslate — usata dai percorsi "dal vivo" della webui (lista
+// canali, pannello Programmazione), che devono restare sempre istantanei
+// e non aspettare mai una traduzione in corso. I titoli non ancora in
+// cache restano nella lingua originale per questo caricamento; arrivano
+// tradotti al prossimo giro del job in background (vedi epg.js), che è
+// l'unico punto in cui avvengono le vere chiamate di rete.
+function getCachedTranslations(texts, targetLang) {
+  if (!texts.length || !targetLang) return texts;
+  const langpair = `auto|${targetLang}`;
+  const getCached = db.prepare('SELECT translated FROM translation_cache WHERE original = ? AND langpair = ?');
+  return texts.map((t) => {
+    if (!t) return t;
+    const cached = getCached.get(t, langpair);
+    return cached ? cached.translated : t;
+  });
+}
+
 // Traduzione via LibreTranslate (self-hosted, URL impostabile in Sorgenti)
 // — nessun servizio di terzi coinvolto, nessuna quota, nessun testo che
 // lascia il tuo server. Se il campo è vuoto, la traduzione EPG è
@@ -137,4 +155,4 @@ async function translateBatch(texts, targetLang) {
   return results;
 }
 
-module.exports = { isNonLatinScript, translateText, translateBatch, getLibreTranslateUrl };
+module.exports = { isNonLatinScript, translateText, translateBatch, getCachedTranslations, getLibreTranslateUrl };

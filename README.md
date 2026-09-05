@@ -48,7 +48,7 @@ CRUD, search, bulk select/delete · online/offline status check (single or all a
 AceStream's own search API with category filtering — select and bulk-import results with one click, same playback options as regular channels
 
 ### 📅 EPG
-Auto-import from XMLTV sources, configurable refresh interval · keeps the last good guide if any source fails or hits a rate limit · expandable daily schedule per channel with previous/next-day navigation · optional program-title translation (Italian/English/French/Spanish) via a self-hosted [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) instance you point the stack at — no third-party service involved, off by default; separate toggles for web UI translation (light) and the /epg.xml export (can be CPU-heavy on large guides)
+Auto-import from XMLTV sources, configurable refresh interval · keeps the last good guide if any source fails or hits a rate limit · expandable daily schedule per channel with previous/next-day navigation · optional program-title translation (Italian/English/French/Spanish) via a self-hosted [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) instance you point the stack at — no third-party service involved, off by default, CPU/RAM-capped so it can't overwhelm a shared host; separate toggles for web UI translation (cache-only, never blocks page loads) and the /epg.xml export (configurable day-window, off by default beyond it)
 
 ### 📃 Playlists
 Two auto-generated variants: MPEG-TS via acexy (recommended, multi-client) and HLS via the native engine endpoint (experimental)
@@ -176,11 +176,19 @@ services:
     environment:
       # Loads only these languages (~200MB RAM each) instead of all 30+
       # (several GB) — adjust to your EPG sources' actual languages.
-      LT_LOAD_ONLY: en,it,fr,es,ru,de,pl,pt,tr
+      LT_LOAD_ONLY: en,it,ru
     volumes:
       - libretranslate-models:/home/libretranslate/.local
     networks:
       - acestream-net
+    # Prevents this from pegging every CPU core / eating all RAM on a
+    # shared host (translation is real neural inference) — edit these two
+    # values directly to match your hardware, no .env needed.
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
 networks:
   acestream-net:
@@ -261,7 +269,7 @@ Engine parameters (ports, bandwidth, cache, access token) live in `.env` — vie
 | `ACEXY_NO_RESPONSE_TIMEOUT` | `30s` | Raise if streams fail with "timeout awaiting response headers" |
 | `ACEXY_BUFFER_SIZE` | `4.2MiB` | Raise if playback is choppy vs. hitting the engine directly |
 | `ACEXY_CLIENT_EVICTION_TIMEOUT` | `10s` | Raise if brief player hiccups cause visible stutter |
-| `LIBRETRANSLATE_LANGUAGES` | `en,it,fr,es,ru,de,pl,pt,tr` | Only relevant with the optional `translate` profile — adjust to your EPG sources' actual languages (each adds ~200MB RAM) |
+| `LIBRETRANSLATE_LANGUAGES` | `en,it,ru` | Only relevant with the optional `translate` profile — adjust to your EPG sources' actual languages (each adds ~200MB RAM) |
 
 In the web UI, **Settings** has the Acexy/engine public URLs (needed for playback links to work from other devices) and configuration export/import. **Sources** has EPG configuration (XMLTV URLs, refresh interval, program-guide translation language) alongside channel source management, since both are about keeping content fresh.
 
@@ -333,13 +341,19 @@ Not included in this stack — run it separately, then paste its URL into Source
 
 ```bash
 docker run -d --name libretranslate --restart unless-stopped \
+  --cpus="1" --memory="1g" \
   -p 5000:5000 \
-  -e LT_LOAD_ONLY=en,it,fr,es,ru,de,pl,pt,tr \
+  -e LT_LOAD_ONLY=en,it,ru \
   -v libretranslate-models:/home/libretranslate/.local \
   libretranslate/libretranslate:latest
 ```
 
 Adjust the language list to whatever your EPG sources actually use. First start downloads the models (a few minutes); subsequent starts are fast. Point the stack at `http://<host-ip>:5000` (or `http://libretranslate:5000` if you add it to this project's own `acestream-net` Docker network instead of running it standalone).
+
+> [!WARNING]
+> Keep `--cpus`/`--memory` (or the equivalent `deploy.resources.limits` if you added it to this project's own compose file, which already includes them) — translation is genuine neural inference and, without a cap, a large batch can peg every CPU core available. On a shared host (e.g. a Proxmox node running other VMs/containers), this has been observed to starve the *entire physical machine*, not just this container. Don't remove the limits to "make it faster" — resize them instead if 1 CPU / 1GB isn't enough for your language set.
+
+Two independent settings in the web UI control what actually gets translated (both under "Translate in the web UI" / "Translate /epg.xml" in Sources): the channel list and Schedule panel only ever read from a local cache and never wait on a live LibreTranslate call, so they stay instant regardless of how busy LibreTranslate is — a title not yet cached simply shows in its original language until the next EPG refresh catches up. The `/epg.xml` export works the same way, additionally limited to a configurable "Days to translate" window so a guide covering many future days doesn't force translating the entire archive.
 </details>
 
 <details>
@@ -387,7 +401,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v2.1-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v2.2-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

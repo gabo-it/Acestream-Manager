@@ -119,7 +119,7 @@ services:
       # Defaults below cover this project's four target languages
       # (it, en, fr, es) plus common EPG source languages — adjust the
       # list to match whatever your own EPG guides actually use.
-      LT_LOAD_ONLY: "${LIBRETRANSLATE_LANGUAGES:-en,it,fr,es,ru,de,pl,pt,tr}"
+      LT_LOAD_ONLY: "${LIBRETRANSLATE_LANGUAGES:-en,it,ru}"
     volumes:
       # Caches downloaded language models so they persist across
       # restarts — without this, every restart re-downloads them (can
@@ -127,6 +127,20 @@ services:
       - libretranslate-models:/home/libretranslate/.local
     networks:
       - acestream-net
+    # Translation is genuine neural inference — without a hard cap, a
+    # large batch can peg every CPU core available and, on a shared host
+    # (e.g. a Proxmox node running other VMs/containers), starve
+    # everything else running on that same machine, not just this stack.
+    # Edit the two values below directly to match your own hardware — no
+    # .env file needed for this. 1 CPU / 1GB is a conservative starting
+    # point; raise it if you load more languages, want faster
+    # translation, or see it struggling — lower it further only if this
+    # host is genuinely tight on resources elsewhere.
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
 networks:
   acestream-net:

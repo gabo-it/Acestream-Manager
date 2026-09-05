@@ -94,11 +94,19 @@ services:
     environment:
       # Loads only these languages (~200MB RAM each) instead of all 30+
       # (several GB) — adjust to your EPG sources' actual languages.
-      LT_LOAD_ONLY: en,it,fr,es,ru,de,pl,pt,tr
+      LT_LOAD_ONLY: en,it,ru
     volumes:
       - libretranslate-models:/home/libretranslate/.local
     networks:
       - acestream-net
+    # Prevents this from pegging every CPU core / eating all RAM on a
+    # shared host (translation is real neural inference) — edit these two
+    # values directly to match your hardware, no .env needed.
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
 networks:
   acestream-net:
@@ -110,7 +118,7 @@ volumes:
 
 ```
 
-`docker compose up -d` alone starts the three core services — `libretranslate` is a separate [profile](https://docs.docker.com/compose/how-tos/profiles/) and stays off unless requested: `docker compose --profile translate up -d`. Only needed for optional EPG translation / cross-alphabet channel matching; self-hosted, no third-party service involved.
+`docker compose up -d` alone starts the three core services — `libretranslate` is a separate [profile](https://docs.docker.com/compose/how-tos/profiles/) and stays off unless requested: `docker compose --profile translate up -d`. Only needed for optional EPG translation / cross-alphabet channel matching; self-hosted, no third-party service involved. Its CPU/RAM limits above are deliberate — translation is real neural inference and, uncapped, can peg every core on a shared host.
 
 ## 🔗 Full project
 

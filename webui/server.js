@@ -12,7 +12,7 @@ const { getEngineParams, getEngineParamsForDisplay, getEngineBaseUrl, isEnvFileW
 const { searchAceStream, CATEGORIES } = require('./search');
 const { getTranslator, SUPPORTED_LANGUAGES } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
-const { translateBatch } = require('./translator');
+const { getCachedTranslations } = require('./translator');
 const { suggestTvgIds, suggestLogosFromSearch } = require('./suggestions');
 const { searchTeams, getTeamMatches, getUpcomingTeamMatches, getBroadcastersByCountry, parseTeamUrl } = require('./football');
 const { getStats, stopSession, getStatsEngineUrl, setStatsEngineUrl, isUsingDefaultEngine } = require('./statsProxy');
@@ -79,13 +79,13 @@ app.get('/', async (req, res) => {
     if (ch.tvg_id) tvgIdCounts[ch.tvg_id] = (tvgIdCounts[ch.tvg_id] || 0) + 1;
   }
 
-  // Traduce i titoli "in onda ora" / "a seguire" mostrati nella lista
-  // canali, se una lingua guida è impostata E la checkbox "Traduci nella
-  // webui" è attiva in Sorgenti. Grazie alla traduzione in blocco già
-  // eseguita in background ad ogni aggiornamento EPG (vedi epg.js), la
-  // stragrande maggioranza di questi titoli sono già in cache — non
-  // richiedono una vera chiamata all'API di traduzione ad ogni caricamento
-  // di questa pagina, solo una lettura dalla cache.
+  // Titoli "in onda ora" / "a seguire" mostrati nella lista canali, se una
+  // lingua guida è impostata E la checkbox "Traduci nella webui" è attiva
+  // in Sorgenti. Legge SOLO dalla cache (mai una chiamata di rete a
+  // LibreTranslate): questa pagina deve restare sempre istantanea, non
+  // aspettare mai una traduzione in corso. Le vere chiamate di rete
+  // avvengono solo nel job in background (vedi epg.js) — un titolo non
+  // ancora tradotto qui resta nella lingua originale fino al prossimo giro.
   const epgLanguage = getSetting('epg_language', '');
   if (epgLanguage && getSetting('epg_translate_ui', '1') === '1') {
     const flatTitles = [];
@@ -101,14 +101,10 @@ app.get('/', async (req, res) => {
       }
     }
     if (flatTitles.length) {
-      try {
-        const translated = await translateBatch(flatTitles, epgLanguage);
-        refs.forEach((ref, i) => {
-          ref.title = translated[i];
-        });
-      } catch (err) {
-        console.error('[channels] traduzione now/next fallita:', err.message);
-      }
+      const translated = getCachedTranslations(flatTitles, epgLanguage);
+      refs.forEach((ref, i) => {
+        ref.title = translated[i];
+      });
     }
   }
 
@@ -206,23 +202,18 @@ app.get('/channels/:id/schedule', async (req, res) => {
     stop: p.stop_ts,
   }));
 
-  // Traduce i titoli (in parallelo, tramite LibreTranslate) nella lingua
-  // guida scelta in Impostazioni, se impostata E la checkbox "Traduci
-  // nella webui" è attiva — stessa checkbox e stessa funzione della lista
-  // canali, dato che entrambe restano naturalmente piccole (pochi canali
-  // visibili o un canale/giorno alla volta), a differenza dell'export
-  // /epg.xml che può coprire l'intero archivio. Nessuna lingua sorgente da
-  // dichiarare: LibreTranslate la rileva da solo per ogni stringa (utile
-  // perché le fonti configurate possono essere in lingue diverse
-  // mescolate tra loro).
+  // Titoli del pannello Programmazione, se una lingua guida è impostata E
+  // la checkbox "Traduci nella webui" è attiva — stessa checkbox e stessa
+  // logica della lista canali. Legge SOLO dalla cache (mai una chiamata
+  // di rete a LibreTranslate): questa pagina deve restare sempre
+  // istantanea, non aspettare mai una traduzione in corso. Le vere
+  // chiamate di rete avvengono solo nel job in background (vedi epg.js) —
+  // un titolo non ancora tradotto qui resta nella lingua originale fino
+  // al prossimo giro.
   const epgLanguage = getSetting('epg_language', '');
   if (epgLanguage && programs.length && getSetting('epg_translate_ui', '1') === '1') {
-    try {
-      const translatedTitles = await translateBatch(programs.map((p) => p.title), epgLanguage);
-      programs = programs.map((p, i) => ({ ...p, title: translatedTitles[i] }));
-    } catch (err) {
-      console.error('[schedule] traduzione fallita:', err.message);
-    }
+    const translatedTitles = getCachedTranslations(programs.map((p) => p.title), epgLanguage);
+    programs = programs.map((p, i) => ({ ...p, title: translatedTitles[i] }));
   }
 
   const [y, m, d] = date.split('-').map(Number);
