@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/docker-build.yml)
 
-Self-hosted, self-maintained Docker stack for AceStream — full control over your own streaming setup, no third-party servers involved: **multi-client streaming** via a CI-rebuilt engine and proxy, **smart channel/EPG matching** that works even across alphabets, **dual TS/HLS playlists**, **AceStream search with bulk import**, and a **live read-only engine dashboard** — all from one web app.
+Self-hosted, self-maintained Docker stack for AceStream — full control over your own streaming setup, no third-party servers involved: **multi-client streaming** via a CI-rebuilt engine and proxy, **smart channel/EPG matching** that works even across alphabets, **dual TS/HLS playlists**, and **AceStream search with bulk import** — all from one web app.
 
 Found a bug? [Open an issue](https://github.com/gabo-it/Acestream-Manager/issues). Have a suggestion or question? [Start a discussion](https://github.com/gabo-it/Acestream-Manager/discussions).
 
@@ -55,9 +55,6 @@ Two auto-generated variants: MPEG-TS via acexy (recommended, multi-client) and H
 
 ### ⚽ Football *(experimental)*
 Search a team through a local index built from major league standings, browse matches, and see broadcasters grouped by country
-
-### ⚙️ Engine
-Read-only dashboard of the running engine's live parameters and status, with unofficial/legacy flags flagged in red against the official docs
 
 ### 📊 Statistics
 Live peers/speed for any stream (optionally pointing at a different engine), plus a list of streams currently playing through this web UI
@@ -152,12 +149,6 @@ services:
       ACESTREAM_HTTP_PORT: "6677"
     volumes:
       - webui-data:/data
-      # Lets the Engine tab read current parameters straight from the
-      # engine container's own logs — no .env file needed. Grants read
-      # access to the Docker socket (real power over the host); remove
-      # this line if you'd rather not, the tab just falls back to showing
-      # built-in defaults.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "4000:4000"
     networks:
@@ -206,9 +197,6 @@ volumes:
 > [!NOTE]
 > `docker compose up -d` alone starts the three core services only — `libretranslate` is a separate [profile](https://docs.docker.com/compose/how-tos/profiles/) and stays off unless you explicitly ask for it: `docker compose --profile translate up -d`. Needed only if you want EPG program-title translation or cross-alphabet tvg-id/logo matching (both optional features) — see "Setting up LibreTranslate" in the Troubleshooting section below.
 
-> [!NOTE]
-> The Engine tab reads current parameters straight from the engine container's own logs via the mounted Docker socket above — accurate, and no `.env` file needed. If you'd rather not grant socket access, remove that line; the tab then shows built-in defaults instead (harmless — you can still see and edit real values right here in the compose file).
-
 **Prefer to build from source instead of pulling published images?** Cloning the repo gets you its actual `docker-compose.yml`, which keeps `build:` alongside `image:` for exactly this:
 
 ```bash
@@ -245,7 +233,7 @@ docker run -d --name acexy \
   -p 8080:8080 \
   ghcr.io/javinator9889/acexy:0.2.2
 
-# 4. Web UI (needs a writable .env on the host for the Engine tab, and a volume for its database)
+# 4. Web UI (needs a writable .env on the host for engine playback settings, and a volume for its database)
 docker volume create webui-data
 cp .env.example .env   # must exist first
 docker run -d --name acestream-webui \
@@ -262,7 +250,7 @@ docker run -d --name acestream-webui \
 
 ## ⚙️ Key settings
 
-Engine parameters (ports, bandwidth, cache, access token) live in `.env` — view them (read-only) in the **Engine** tab, edit the file directly, then `docker compose up -d`. Acexy tuning also lives in `.env`:
+Engine parameters (ports, bandwidth, cache, access token) live in `.env` — edit the file directly, then `docker compose up -d`. Acexy tuning also lives in `.env`:
 
 | Variable | Default | When to change it |
 |----------|---------|--------------------|
@@ -271,7 +259,7 @@ Engine parameters (ports, bandwidth, cache, access token) live in `.env` — vie
 | `ACEXY_CLIENT_EVICTION_TIMEOUT` | `10s` | Raise if brief player hiccups cause visible stutter |
 | `LIBRETRANSLATE_LANGUAGES` | `en,it,ru` | Only relevant with the optional `translate` profile — adjust to your EPG sources' actual languages (each adds ~200MB RAM) |
 
-In the web UI, **Settings** has the Acexy/engine public URLs (needed for playback links to work from other devices) and configuration export/import. **Sources** has EPG configuration (XMLTV URLs, refresh interval, program-guide translation language) alongside channel source management, since both are about keeping content fresh.
+In the web UI, **Settings** has three separate engine URL fields — each with a live reachability/version indicator next to it: the M3U/TS playlist URL (VLC, AcePlayer — normally acexy), the HTTP playback engine URL used only by the built-in web player (blank = falls back to the M3U URL above; kept separate because the web player's close-together retries need an engine that tolerates overlapping connections, like acexy — pointing it at a plain engine can cause instability even with one viewer), and the public engine URL needed for the HLS playlist to work from other devices. Settings also has configuration export/import. **Sources** has EPG configuration (XMLTV URLs — one per line, refresh interval, program-guide translation) alongside channel source management, since both are about keeping content fresh.
 
 ---
 
@@ -314,6 +302,12 @@ Raise `ACEXY_NO_RESPONSE_TIMEOUT` (try `60s`), check the P2P port is actually re
 The web player automatically falls back through several strategies before giving up: retries, then video-only (in case the audio track uses a codec MediaSource Extensions can't decode, like AC-3), then finally a server-side remux to fragmented MP4 (via `ffmpeg`, video stream-copied so it's cheap, audio forced to AAC) played through the plain `<video>` element — this bypasses MediaSource Extensions entirely, sidestepping Chromium's (Chrome/Edge) stricter MSE validation that Firefox tolerates. This fixes many, but not all, previously-failing streams.
 
 **Known limitation**: a minority of streams have a genuine H.264 bitstream irregularity (some encoders don't repeat SPS/PPS parameter sets correctly before every keyframe) that trips up `ffmpeg`'s own parser too — confirmed via its `non-existing PPS referenced` warning, persisting even with a generous analysis window. Firefox's own MSE implementation happens to tolerate this specific quirk; Chromium's stricter validation and `ffmpeg`'s parser both don't. For these streams, VLC/AcePlayer (or Firefox) remain the reliable option — the direct link is always shown under the player.
+</details>
+
+<details>
+<summary>Web player is unstable (stalls/errors), especially with more than one viewer</summary>
+
+Check Settings → "HTTP playback engine URL". If it's pointed at a plain AceStream engine without multiplexing (not acexy), the web player's own retry logic — which makes closely-spaced, sometimes briefly-overlapping requests — can conflict with itself, since such an engine only tolerates one connection at a time. Point this field at acexy (or leave it blank to fall back to the M3U/TS playlist URL, which is normally acexy already) to fix it. This is expected behavior, not a bug: a non-multiplexing engine trades stability for lower latency, and only really works well with exactly one connection at a time.
 </details>
 
 <details>
@@ -401,7 +395,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v2.2-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v2.3-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

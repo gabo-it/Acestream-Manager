@@ -15,8 +15,8 @@ const { getSetting } = require('./db');
 // il percorso principale via mpegts.js resta invariato per tutti,
 // Firefox compreso.
 function remuxToFmp4(acestreamId, res) {
-  const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
-  const inputUrl = `${acexyBaseUrl}/ace/getstream?id=${encodeURIComponent(acestreamId)}`;
+  const httpPlaybackUrl = getSetting('http_playback_url', getSetting('acexy_base_url', 'http://acexy:8080')).replace(/\/$/, '');
+  const inputUrl = `${httpPlaybackUrl}/ace/getstream?id=${encodeURIComponent(acestreamId)}`;
 
   const ffmpeg = spawn('ffmpeg', [
     // Finestra di analisi iniziale più ampia del default ffmpeg (~5s/5MB):

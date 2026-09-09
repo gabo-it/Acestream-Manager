@@ -70,12 +70,6 @@ services:
       ACESTREAM_HTTP_PORT: "6677"
     volumes:
       - webui-data:/data
-      # Lets the Engine tab read current parameters straight from the
-      # engine container's own logs — no .env file needed. Grants read
-      # access to the Docker socket (real power over the host); remove
-      # this line if you'd rather not, the tab just falls back to showing
-      # built-in defaults.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "4000:4000"
     networks:
@@ -136,7 +130,7 @@ The main repository has the full README covering configuration, troubleshooting,
 - EPG import with cross-alphabet tvg-id/logo matching and optional program-title translation (via self-hosted LibreTranslate)
 - AceStream search with bulk import
 - Dual playlists (MPEG-TS + HLS), built-in web player, VLC/AcePlayer options
-- Read-only Engine dashboard (reads live parameters straight from the engine's own logs), config export/import, Italian/English interface
+- Reachability/version indicators next to each engine URL in Settings, config export/import, Italian/English interface
 
 ## 🏷️ Tags
 

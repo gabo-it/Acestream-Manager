@@ -4,15 +4,31 @@
 
   <div>
     <label class="block text-sm text-slate-400 mb-1"><%= t('settings.acexy_url_label') %></label>
-    <input name="acexy_base_url" value="<%= acexyBaseUrl %>"
-           class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+    <div class="flex gap-2 items-center">
+      <input name="acexy_base_url" value="<%= acexyBaseUrl %>" data-engine-check
+             class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+      <span class="text-xs whitespace-nowrap text-slate-500" data-status-for="acexy_base_url">…</span>
+    </div>
     <p class="text-xs text-slate-500 mt-1"><%= t('settings.acexy_url_help') %></p>
   </div>
 
   <div>
+    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.http_playback_url_label') %></label>
+    <div class="flex gap-2 items-center">
+      <input name="http_playback_url" value="<%= httpPlaybackUrl %>" placeholder="<%= acexyBaseUrl %>" data-engine-check data-optional="1"
+             class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+      <span class="text-xs whitespace-nowrap text-slate-500" data-status-for="http_playback_url">…</span>
+    </div>
+    <p class="text-xs text-slate-500 mt-1"><%= t('settings.http_playback_url_help') %></p>
+  </div>
+
+  <div>
     <label class="block text-sm text-slate-400 mb-1"><%= t('settings.engine_public_url_label') %></label>
-    <input name="engine_public_url" value="<%= enginePublicUrl %>" placeholder="http://192.168.1.50:6677"
-           class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+    <div class="flex gap-2 items-center">
+      <input name="engine_public_url" value="<%= enginePublicUrl %>" placeholder="http://192.168.1.50:6677" data-engine-check
+             class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+      <span class="text-xs whitespace-nowrap text-slate-500" data-status-for="engine_public_url">…</span>
+    </div>
     <p class="text-xs text-slate-500 mt-1"><%= t('settings.engine_public_url_help') %></p>
   </div>
 
@@ -40,3 +56,53 @@
     </form>
   </div>
 </div>
+
+<script>
+  (function () {
+    var MSG_CHECKING = <%- JSON.stringify(t('settings.engine_check_checking')) %>;
+    var MSG_UNREACHABLE = <%- JSON.stringify(t('settings.engine_check_unreachable')) %>;
+    var MSG_FALLBACK = <%- JSON.stringify(t('settings.engine_check_fallback')) %>;
+    var MSG_REACHABLE = <%- JSON.stringify(t('settings.engine_check_reachable')) %>;
+
+    async function checkEngine(input, statusEl, optional) {
+      var url = input.value.trim();
+      if (!url) {
+        if (optional) {
+          statusEl.textContent = MSG_FALLBACK;
+          statusEl.className = 'text-xs whitespace-nowrap text-slate-500';
+        } else {
+          statusEl.textContent = '';
+        }
+        return;
+      }
+      statusEl.textContent = MSG_CHECKING;
+      statusEl.className = 'text-xs whitespace-nowrap text-slate-500';
+      try {
+        var res = await fetch('/settings/check-engine?url=' + encodeURIComponent(url));
+        var data = await res.json();
+        if (data.ok) {
+          statusEl.textContent = data.version ? ('✓ v' + data.version) : '✓ ' + MSG_REACHABLE;
+          statusEl.className = 'text-xs whitespace-nowrap text-emerald-400';
+        } else {
+          statusEl.textContent = '✗ ' + MSG_UNREACHABLE;
+          statusEl.className = 'text-xs whitespace-nowrap text-red-400';
+        }
+      } catch (e) {
+        statusEl.textContent = '✗ ' + MSG_UNREACHABLE;
+        statusEl.className = 'text-xs whitespace-nowrap text-red-400';
+      }
+    }
+
+    document.querySelectorAll('[data-engine-check]').forEach(function (input) {
+      var statusEl = document.querySelector('[data-status-for="' + input.name + '"]');
+      if (!statusEl) return;
+      var optional = input.dataset.optional === '1';
+      checkEngine(input, statusEl, optional);
+      var debounceTimer;
+      input.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () { checkEngine(input, statusEl, optional); }, 800);
+      });
+    });
+  })();
+</script>

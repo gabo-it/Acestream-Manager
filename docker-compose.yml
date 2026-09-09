@@ -61,7 +61,11 @@ services:
       # response headers" failures otherwise.
       ACEXY_NO_RESPONSE_TIMEOUT: "${ACEXY_NO_RESPONSE_TIMEOUT:-30s}"
       # Buffer before handing data to the player — raise if playback is
-      # choppy. Upstream default: 4.2MiB.
+      # choppy. Upstream (acexy) default: 4.2MiB. Briefly raised to 8MiB
+      # to test a fix for occasional micro-stalls/AV desync, but real-world
+      # testing showed inconsistent results (sometimes better, sometimes
+      # worse) — pointing to P2P peer variability rather than buffer size
+      # as the actual cause. Reverted to the upstream default.
       ACEXY_BUFFER_SIZE: "${ACEXY_BUFFER_SIZE:-4.2MiB}"
       # How long to tolerate a silent client before evicting it — raise if
       # brief player hiccups cause stutter. Upstream default: 5s.
@@ -87,13 +91,6 @@ services:
       ACESTREAM_HTTP_PORT: "${HTTP_PORT:-6677}"
     volumes:
       - webui-data:/data
-      # Lets the Engine tab display current parameters, read straight from
-      # the engine container's own logs (most reliable — reflects exactly
-      # what's running) via the Docker socket, falling back to the .env
-      # file below if the socket isn't available. Remove either line if
-      # you'd rather not grant that access; the tab falls back gracefully
-      # either way, down to built-in defaults as a last resort.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./.env:/config/.env
     ports:
       - "${WEBUI_PORT_EXPOSED:-4000}:4000"

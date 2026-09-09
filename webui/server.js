@@ -8,7 +8,7 @@ const { buildM3U, buildXmltv } = require('./playlist');
 const { scrapeUrl, importChannels, refreshSource, refreshAllSources, refreshDueSources } = require('./scraper');
 const { parseM3U } = require('./m3u');
 const { checkAndStore, checkAllChannels } = require('./statuscheck');
-const { getEngineParams, getEngineParamsForDisplay, getEngineBaseUrl, isEnvFileWritable, isMountedAsDirectory } = require('./engineConfig');
+const { getEngineParams, getEngineBaseUrl } = require('./engineConfig');
 const { searchAceStream, CATEGORIES } = require('./search');
 const { getTranslator, SUPPORTED_LANGUAGES } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
@@ -400,7 +400,16 @@ app.get('/sources', (req, res) => {
 });
 
 app.post('/sources/epg', (req, res) => {
-  setSetting('epg_urls', req.body.epg_urls || '');
+  // Normalizziamo sempre a una URL per riga, indipendentemente da come
+  // l'utente le ha separate (virgola, a capo, o un misto) — così i dati
+  // salvati in passato con virgole si "ripuliscono" automaticamente al
+  // primo salvataggio, e restano leggibili anche con molte fonti.
+  const epgUrlsNormalized = (req.body.epg_urls || '')
+    .split(/[\n,]+/)
+    .map((u) => u.trim())
+    .filter(Boolean)
+    .join('\n');
+  setSetting('epg_urls', epgUrlsNormalized);
   const hours = Math.max(1, Math.min(24, parseInt(req.body.epg_refresh_hours, 10) || 6));
   setSetting('epg_refresh_hours', String(hours));
   const allowedLangs = new Set(['', 'it', 'en', 'fr', 'es']);
@@ -744,106 +753,13 @@ app.get('/football/match', async (req, res) => {
   render(res, 'football_match', { titleKey: 'football.broadcasters_title', matchUrl, coverage, error });
 });
 
-// ---------- Motore (parametri engine) ----------
-
-// Flag esatti elencati nella documentazione ufficiale
-// (https://docs.acestream.net/developers/engine-command-line-options/):
-// usati per marcare in rosso, nel tab Motore, i parametri che il progetto
-// usa ma che NON compaiono in quella pagina (probabilmente supportati solo
-// da questa build Python "legacy" dell'engine).
-const OFFICIAL_ENGINE_FLAGS = new Set([
-  '--port',
-  '--http-port',
-  '--bind-all',
-  '--api-port',
-  '--state-dir',
-  '--cache-dir',
-  '--cache-limit',
-  '--cache-max-bytes',
-  '--cache-auto',
-  '--login',
-  '--password',
-  '--access-token',
-  '--make-default-access-token',
-  '--use-internal-buffering',
-  '--log-stdout',
-  '--log-stderr',
-  '--log-file',
-  '--log-debug',
-]);
-
-app.get('/engine', async (req, res) => {
-  const params = await getEngineParamsForDisplay();
-  const effectiveCommand = [
-    'start-engine',
-    `--http-port ${params.httpPort}`,
-    `--port ${params.p2pPort}`,
-    params.accessToken ? `--access-token ${params.accessToken}` : '',
-    params.engineFlags || '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  // Estrae flag+valore da ENGINE_FLAGS (es. "--live-cache-type memory"
-  // -> flag "--live-cache-type", value "memory"; "--bind-all" da solo,
-  // senza valore che segue -> considerato un flag booleano "(attivo)").
-  // Il bug precedente mostrava sempre "—" al posto del valore reale.
-  function parseEngineFlags(flagsStr) {
-    const tokens = flagsStr.split(/\s+/).filter(Boolean);
-    const result = [];
-    for (let i = 0; i < tokens.length; i++) {
-      const tok = tokens[i];
-      if (!tok.startsWith('--')) continue;
-      const next = tokens[i + 1];
-      if (next && !next.startsWith('--')) {
-        result.push({ flag: tok, value: next });
-        i++;
-      } else {
-        result.push({ flag: tok, value: '(attivo)' });
-      }
-    }
-    return result;
-  }
-
-  // Elenco dei parametri attualmente in uso, con verifica rispetto alla
-  // documentazione ufficiale: mostrato in sola lettura nel tab Motore.
-  const flagsFromEngineFlags = parseEngineFlags(params.engineFlags);
-  const paramsAudit = [
-    { label: 'Porta HTTP', flag: '--http-port', value: params.httpPort },
-    { label: 'Porta P2P', flag: '--port', value: params.p2pPort },
-    { label: 'Access token', flag: '--access-token', value: params.accessToken ? '••••••' : '(non impostato)' },
-    ...flagsFromEngineFlags.map((f) => ({ label: 'Flag (ENGINE_FLAGS)', flag: f.flag, value: f.value })),
-  ].map((p) => ({ ...p, isOfficial: OFFICIAL_ENGINE_FLAGS.has(p.flag) }));
-
-  let engineStatus = { ok: false, error: reqT()('errors.not_verified') };
-  try {
-    const r = await fetch(`${getEngineBaseUrl()}/webui/api/service?method=get_version`, {
-      signal: AbortSignal.timeout(4000),
-    });
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-    engineStatus = { ok: true, version: data.result?.version || '?' };
-  } catch (err) {
-    engineStatus = { ok: false, error: err.message };
-  }
-
-  render(res, 'engine', {
-    titleKey: 'engine.title',
-    params,
-    paramsAudit,
-    effectiveCommand,
-    engineStatus,
-    writable: isEnvFileWritable(),
-    envIsDirectory: isMountedAsDirectory(),
-  });
-});
-
 // ---------- Impostazioni ----------
 
 app.get('/settings', (req, res) => {
   render(res, 'settings', {
     titleKey: 'settings.title',
     acexyBaseUrl: getSetting('acexy_base_url', 'http://acexy:8080'),
+    httpPlaybackUrl: getSetting('http_playback_url', ''),
     enginePublicUrl: getSetting('engine_public_url', ''),
   });
 });
@@ -862,8 +778,56 @@ function normalizeBaseUrl(raw, fallback) {
 
 app.post('/settings', (req, res) => {
   setSetting('acexy_base_url', normalizeBaseUrl(req.body.acexy_base_url, 'http://acexy:8080'));
+  // Campo facoltativo: vuoto = il player web ricade su acexy_base_url
+  // (comportamento di sempre) — vedi streamProxy.js/remux.js.
+  setSetting('http_playback_url', normalizeBaseUrl(req.body.http_playback_url, ''));
   setSetting('engine_public_url', normalizeBaseUrl(req.body.engine_public_url, ''));
   res.redirect('/settings');
+});
+
+// Controllo raggiungibilità/versione per un URL engine qualsiasi (usa lo
+// stesso endpoint standard che espone qualunque engine AceStream, il
+// nostro o uno esterno) — richiamato via fetch dal JS di settings.ejs per
+// ciascuno dei campi URL configurati, così l'utente vede subito se punta
+// a qualcosa di davvero raggiungibile senza dover salvare e ricaricare.
+//
+// Due livelli, perché questi campi possono puntare a due cose diverse:
+// un vero engine AceStream (espone /webui/api/service?method=get_version,
+// da cui ricaviamo anche la versione) oppure acexy (che secondo la sua
+// stessa documentazione ufficiale espone SOLO /ace/getstream, nessun
+// endpoint di stato) — se il primo tentativo fallisce, proviamo il
+// secondo: qualunque risposta HTTP (anche un errore) prova che qualcosa
+// è in ascolto e raggiungibile a quell'indirizzo, a differenza di un
+// vero errore di connessione (rifiutata, timeout, DNS).
+app.get('/settings/check-engine', async (req, res) => {
+  const url = normalizeBaseUrl(req.query.url, '');
+  if (!url) return res.json({ ok: false, error: 'empty' });
+
+  try {
+    const r = await fetch(`${url}/webui/api/service?method=get_version`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (!data.error && data.result?.version) {
+        return res.json({ ok: true, version: data.result.version });
+      }
+    }
+  } catch {
+    // Non è un engine "vero" raggiungibile con questo endpoint (o non lo
+    // è affatto) — proviamo il fallback sotto prima di dichiarare
+    // irraggiungibile.
+  }
+
+  try {
+    await fetch(`${url}/ace/getstream`, { signal: AbortSignal.timeout(4000) });
+    // Qualunque risposta HTTP arrivi (anche un errore tipo 400 per ID
+    // mancante) prova che c'è qualcosa di raggiungibile qui — non
+    // sappiamo la versione, ma sappiamo che risponde.
+    res.json({ ok: true, version: null });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
 
 // ---------- Export/import configurazione ----------

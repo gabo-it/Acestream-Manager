@@ -162,7 +162,7 @@ async function translateProgramTitlesInBackground() {
 
 async function refreshEpg() {
   const urlsRaw = getSetting('epg_urls', '');
-  const urls = urlsRaw.split(',').map((u) => u.trim()).filter(Boolean);
+  const urls = urlsRaw.split(/[\n,]+/).map((u) => u.trim()).filter(Boolean);
   if (urls.length === 0) {
     setSetting('epg_last_result', 'Nessuna sorgente EPG configurata.');
     return { imported: 0, sources: 0, errors: [] };

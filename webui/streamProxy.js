@@ -36,11 +36,16 @@ function pipeUpstream(upstream, res) {
   nodeStream.pipe(res);
 }
 
-// Proxy per lo stream MPEG-TS (via acexy) — usato dal player web come
-// sorgente per mpegts.js al posto dell'URL diretto di acexy.
+// Proxy per lo stream MPEG-TS (via l'engine di riproduzione HTTP
+// configurato) — usato dal player web come sorgente per mpegts.js al
+// posto dell'URL diretto. Campo separato da acexy_base_url (usato dalla
+// playlist M3U/VLC/AcePlayer): un client esterno diretto sull'engine nudo
+// e il player web con i suoi retry ravvicinati hanno esigenze diverse —
+// forzarli sullo stesso URL può creare conflitti se quell'URL punta a un
+// engine senza multiplexing multi-client.
 async function proxyTs(req, res) {
-  const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
-  const upstreamUrl = `${acexyBaseUrl}/ace/getstream?id=${encodeURIComponent(req.params.id)}`;
+  const httpPlaybackUrl = getSetting('http_playback_url', getSetting('acexy_base_url', 'http://acexy:8080')).replace(/\/$/, '');
+  const upstreamUrl = `${httpPlaybackUrl}/ace/getstream?id=${encodeURIComponent(req.params.id)}`;
 
   const controller = new AbortController();
   req.on('close', () => {

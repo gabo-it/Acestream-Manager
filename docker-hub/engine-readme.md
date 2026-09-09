@@ -70,12 +70,6 @@ services:
       ACESTREAM_HTTP_PORT: "6677"
     volumes:
       - webui-data:/data
-      # Lets the Engine tab read current parameters straight from the
-      # engine container's own logs — no .env file needed. Grants read
-      # access to the Docker socket (real power over the host); remove
-      # this line if you'd rather not, the tab just falls back to showing
-      # built-in defaults.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "4000:4000"
     networks:

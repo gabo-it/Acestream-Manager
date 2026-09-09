@@ -133,7 +133,7 @@ acestream://0123456789abcdef0123456789abcdef01234567"
 
   <div>
     <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_urls_label') %></label>
-    <textarea name="epg_urls" rows="3"
+    <textarea name="epg_urls" rows="6" placeholder="https://example.com/epg1.xml&#10;https://example.com/epg2.xml"
               class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm"><%= epgUrls %></textarea>
     <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_urls_help') %></p>
     <% if (epgLastResult) { %>

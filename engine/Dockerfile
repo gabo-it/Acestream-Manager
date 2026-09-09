@@ -13,7 +13,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Startup script: builds the engine's command-line flags from environment
-# variables, so parameters are configurable from the webui (Engine tab)
+# variables, so parameters are configurable by editing .env directly,
 # without rebuilding the image.
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
@@ -29,10 +29,9 @@ ENV PATH="/srv/ace/.local/bin:${PATH}"
 # The HTTP port is published to the host by docker-compose.yml (needed for
 # the native /ace/manifest.m3u8 endpoint used by the HLS playlist) — see
 # that file for details. Defaults below, overridable via the HTTP_PORT/PORT
-# environment variables (settable from the webui, Engine tab):
+# environment variables in .env:
 ENV HTTP_PORT=6677
 ENV PORT=44556
-ENV LIVE_CACHE_TYPE=memory
 ENV BIND_ALL=1
 
 EXPOSE 6677
