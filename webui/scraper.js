@@ -123,7 +123,7 @@ async function refreshDueSources() {
       try {
         total += await refreshSource(s);
       } catch (err) {
-        console.error(`[scraper] auto-refresh fallito per ${s.url}:`, err.message);
+        console.error(`[scraper] auto-refresh failed for ${s.url}:`, err.message);
       }
     }
   }
@@ -137,7 +137,7 @@ async function refreshAllSources() {
     try {
       total += await refreshSource(s);
     } catch (err) {
-      console.error(`[scraper] errore su ${s.url}:`, err.message);
+      console.error(`[scraper] error on ${s.url}:`, err.message);
     }
   }
   return total;

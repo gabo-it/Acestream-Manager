@@ -18,8 +18,7 @@ services:
       HTTP_PORT: "6677"
       PORT: "44556"
       ACCESS_TOKEN: ""          # set this if this port is reachable beyond your LAN
-      # Everything else the engine supports goes in this one line — add,
-      # remove, or change any official flag directly here. Reference:
+      # Any official engine flag goes in this one line — reference:
       # https://docs.acestream.net/developers/engine-command-line-options/
       ENGINE_FLAGS: "--client-console --bind-all --live-cache-type memory"
     expose:
@@ -75,32 +74,48 @@ services:
     networks:
       - acestream-net
 
-  # Optional: self-hosted translation engine for EPG program-title
-  # translation and cross-alphabet tvg-id/logo matching — no third-party
-  # service, everything stays on your own hardware. Disabled by default;
-  # start it alongside the rest with: docker compose --profile translate up -d
-  # Once running, set Sources → "LibreTranslate URL" to http://libretranslate:5000
+  # Optional: self-hosted EPG translation / cross-alphabet matching.
+  # Disabled by default: docker compose --profile translate up -d
+  # Then: Playlist → "LibreTranslate URL" → http://libretranslate:5000
   libretranslate:
     image: libretranslate/libretranslate:latest
     container_name: libretranslate
     restart: unless-stopped
     profiles: ["translate"]
     environment:
-      # Loads only these languages (~200MB RAM each) instead of all 30+
-      # (several GB) — adjust to your EPG sources' actual languages.
+      # ~200MB RAM per language loaded — adjust to your actual EPG languages.
       LT_LOAD_ONLY: en,it,ru
     volumes:
       - libretranslate-models:/home/libretranslate/.local
     networks:
       - acestream-net
-    # Prevents this from pegging every CPU core / eating all RAM on a
-    # shared host (translation is real neural inference) — edit these two
-    # values directly to match your hardware, no .env needed.
+    # Edit directly to match your hardware — no .env needed.
     deploy:
       resources:
         limits:
           cpus: '1'
           memory: 1G
+
+  # Optional: Cloudflare WARP for the webui's own outbound requests only —
+  # not connected to AceStream/acexy traffic, nothing routed through it yet.
+  # ⚠️ Requires NET_ADMIN — a much broader permission than anything else here.
+  # Disabled by default: docker compose --profile warp up -d
+  warp:
+    image: caomingjun/warp
+    container_name: warp
+    restart: unless-stopped
+    profiles: ["warp"]
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      - WARP_SLEEP=2
+    volumes:
+      - warp-data:/var/lib/cloudflare-warp
+    networks:
+      - acestream-net
 
 networks:
   acestream-net:
@@ -109,7 +124,7 @@ networks:
 volumes:
   webui-data:
   libretranslate-models:
-
+  warp-data:
 ```
 
 `docker compose up -d` alone starts the three core services — `libretranslate` is a separate [profile](https://docs.docker.com/compose/how-tos/profiles/) and stays off unless requested: `docker compose --profile translate up -d`. Only needed for optional EPG translation / cross-alphabet channel matching; self-hosted, no third-party service involved. Its CPU/RAM limits above are deliberate — translation is real neural inference and, uncapped, can peg every core on a shared host.

@@ -115,7 +115,7 @@
       body: JSON.stringify({ results: selected }),
     })
       .then(function (r) { return r.json(); })
-      .then(function () { window.location.href = '/'; })
+      .then(function () { window.location.href = '/channels'; })
       .catch(function (err) { alert('Errore: ' + err.message); });
   }
 </script>

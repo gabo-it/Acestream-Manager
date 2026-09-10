@@ -4,7 +4,9 @@
   <%= t('sources.zeronet_hint') %>
 </p>
 
-<form method="POST" action="/sources/new" class="flex gap-2 mb-8 max-w-2xl">
+<h2 class="text-xl font-bold mb-4"><%= t('sources.scraper_title') %></h2>
+
+<form method="POST" action="/sources/new" class="flex gap-2 mb-6 max-w-2xl">
   <input type="url" name="url" required placeholder="https://esempio.com/lista-canali oppure http://127.0.0.1:43110/1Sito.../"
          class="flex-1 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
   <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
@@ -81,7 +83,7 @@
 
 <h2 class="text-xl font-bold mb-4"><%= t('import.title') %></h2>
 
-<div class="grid gap-6 max-w-2xl">
+<div class="grid gap-6 max-w-2xl mb-10">
 
   <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
     <h3 class="font-semibold mb-1"><%= t('import.from_url') %></h3>
@@ -126,89 +128,6 @@ acestream://0123456789abcdef0123456789abcdef01234567"
   </div>
 
 </div>
-
-<h2 class="text-xl font-bold mb-4 mt-10"><%= t('sources.epg_title') %></h2>
-
-<form method="POST" action="/sources/epg" class="max-w-2xl grid gap-6 rounded-xl border border-slate-800 bg-slate-800/60 p-6">
-
-  <div>
-    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_urls_label') %></label>
-    <textarea name="epg_urls" rows="6" placeholder="https://example.com/epg1.xml&#10;https://example.com/epg2.xml"
-              class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm"><%= epgUrls %></textarea>
-    <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_urls_help') %></p>
-    <% if (epgLastResult) { %>
-      <% const epgFailed = /fallit|errore|error|failed/i.test(epgLastResult); %>
-      <p class="text-xs mt-2 rounded-lg border <%= epgFailed ? 'border-red-900 bg-red-950/40 text-red-300' : 'border-slate-800 bg-slate-950 text-slate-400' %> px-3 py-2">
-        <span class="<%= epgFailed ? 'text-red-200' : 'text-slate-300' %>"><%= t('settings.epg_last_update') %></span> <%= epgLastResult %>
-      </p>
-    <% } %>
-  </div>
-
-  <div>
-    <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_interval_label') %></label>
-    <input type="number" name="epg_refresh_hours" min="1" max="24" value="<%= epgRefreshHours %>"
-           class="w-32 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
-    <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_interval_help') %></p>
-  </div>
-
-  <div class="rounded-xl border border-slate-700 bg-slate-900/60 p-4 grid gap-4">
-    <h3 class="font-semibold text-slate-200"><%= t('sources.epg_translation_title') %></h3>
-
-    <div>
-      <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_language_label') %></label>
-      <select name="epg_language" class="w-56 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500">
-        <option value="" <%= !epgLanguage ? 'selected' : '' %>><%= t('settings.epg_language_original') %></option>
-        <option value="it" <%= epgLanguage === 'it' ? 'selected' : '' %>>Italiano</option>
-        <option value="en" <%= epgLanguage === 'en' ? 'selected' : '' %>>English</option>
-        <option value="fr" <%= epgLanguage === 'fr' ? 'selected' : '' %>>Français</option>
-        <option value="es" <%= epgLanguage === 'es' ? 'selected' : '' %>>Español</option>
-      </select>
-      <p class="text-xs text-amber-400 mt-1"><%= t('settings.epg_language_help') %></p>
-    </div>
-
-    <div>
-      <label class="block text-sm text-slate-400 mb-1"><%= t('settings.libretranslate_url_label') %></label>
-      <input type="url" name="libretranslate_url" value="<%= libretranslateUrl || '' %>" placeholder="http://192.168.1.50:5000"
-             class="w-80 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500" />
-      <p class="text-xs text-slate-500 mt-1"><%= t('settings.libretranslate_url_help') %></p>
-    </div>
-
-    <div class="space-y-2">
-      <label class="flex items-start gap-2 text-sm">
-        <input type="checkbox" name="epg_translate_ui" <%= epgTranslateUi ? 'checked' : '' %>
-               class="mt-1 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" />
-        <span>
-          <span class="text-slate-300"><%= t('settings.epg_translate_ui_label') %></span><br/>
-          <span class="text-xs text-slate-500"><%= t('settings.epg_translate_ui_help') %></span>
-        </span>
-      </label>
-      <label class="flex items-start gap-2 text-sm">
-        <input type="checkbox" name="epg_translate_xml" <%= epgTranslateXml ? 'checked' : '' %>
-               class="mt-1 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" />
-        <span>
-          <span class="text-slate-300"><%= t('settings.epg_translate_xml_label') %></span><br/>
-          <span class="text-xs text-amber-400"><%= t('settings.epg_translate_xml_help') %></span>
-        </span>
-      </label>
-
-      <div class="ml-6">
-        <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_translate_days_label') %></label>
-        <input type="number" name="epg_translate_days" value="<%= epgTranslateDays || '2' %>" min="1" max="14"
-               class="w-24 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500" />
-        <p class="text-xs text-amber-400 mt-1"><%= t('settings.epg_translate_days_help') %></p>
-      </div>
-    </div>
-  </div>
-
-  <div class="flex gap-3">
-    <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
-      <%= t('settings.save') %>
-    </button>
-    <button formaction="/sources/epg/refresh" class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
-      <%= t('settings.refresh_epg') %>
-    </button>
-  </div>
-</form>
 
 <!-- Popup di selezione canali trovati -->
 <div id="preview-overlay" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">

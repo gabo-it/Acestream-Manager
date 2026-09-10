@@ -1,0 +1,220 @@
+<div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
+  <h1 class="text-3xl font-bold tracking-tight"><%= t('tv.title') %></h1>
+  <form method="GET" action="/tv" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
+    <input type="text" name="q" value="<%= q || '' %>" placeholder="<%= t('channels.search_placeholder') %>"
+           class="bg-transparent px-3.5 py-2.5 text-sm focus:outline-none w-56 placeholder:text-slate-600" />
+    <button class="px-3.5 py-2.5 text-slate-500 hover:text-indigo-400 transition">🔍</button>
+  </form>
+</div>
+
+<!-- Elenco canali -->
+<% if (channels.length === 0) { %>
+  <p class="text-sm text-slate-500"><%= t('channels.empty') %></p>
+<% } else { %>
+  <div class="grid gap-2 mb-8">
+    <% channels.forEach(function(ch) { %>
+      <% var epg = epgByChannel[ch.id] || {}; %>
+      <button type="button" data-tv-card="<%= ch.id %>" data-tv-name="<%= ch.name %>"
+              class="group w-full flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-indigo-500/50 hover:bg-slate-900 transition p-3 text-left">
+        <div class="flex items-center gap-3 w-56 flex-shrink-0 min-w-0">
+          <% if (ch.logo_url) { %>
+            <img src="<%= ch.logo_url %>" alt="" class="w-10 h-10 rounded-lg object-contain bg-slate-950 ring-1 ring-slate-700/60 flex-shrink-0" onerror="this.style.display='none'" />
+          <% } else { %>
+            <span class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 text-sm">📺</span>
+          <% } %>
+          <span class="font-medium truncate group-hover:text-indigo-300 transition"><%= ch.name %></span>
+        </div>
+
+        <div class="flex-1 min-w-0 rounded-lg bg-slate-950/60 border border-slate-800/60 px-3 py-2">
+          <% if (epg.now) { %>
+            <p class="text-sm text-slate-200 truncate"><%= epg.now.title %></p>
+            <% if (epg.next) { %>
+              <p class="text-xs text-slate-500 truncate mt-0.5"><%= t('tv.next_label') %>: <%= epg.next.title %></p>
+            <% } %>
+          <% } else { %>
+            <p class="text-sm text-slate-600"><%= t('tv.no_epg') %></p>
+          <% } %>
+        </div>
+      </button>
+    <% }); %>
+  </div>
+<% } %>
+
+<!-- Modale di riproduzione -->
+<div id="tv-modal-overlay" class="hidden fixed inset-0 bg-black/80 z-40 flex items-center justify-center p-3 sm:p-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto">
+    <div class="flex items-center justify-between p-4 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
+      <h2 id="tv-modal-name" class="text-lg font-semibold"></h2>
+      <button type="button" onclick="closeTvModal()" class="text-slate-400 hover:text-white transition text-xl leading-none">✕</button>
+    </div>
+
+    <div class="p-4">
+      <div class="rounded-xl overflow-hidden border border-slate-800 bg-black mb-4">
+        <iframe id="tv-player-frame" class="w-full block" style="height: 480px;" allow="autoplay" src="about:blank"></iframe>
+      </div>
+
+      <% if (vlcDevices.length > 0) { %>
+        <div class="mb-4">
+          <p class="text-xs text-slate-500 mb-2"><%= t('tv.send_to') %></p>
+          <div id="tv-send-buttons" class="flex flex-wrap gap-2"></div>
+          <p id="tv-send-status" class="text-xs mt-2"></p>
+        </div>
+      <% } %>
+
+      <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4">
+        <h3 class="text-sm font-semibold mb-3"><%= t('tv.schedule_title') %></h3>
+        <div id="tv-schedule">
+          <p class="text-slate-500 text-sm"><%= t('schedule.loading') %></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var i18n = {
+    prevDay: <%- JSON.stringify(t('schedule.prev_day')) %>,
+    nextDay: <%- JSON.stringify(t('schedule.next_day')) %>,
+    noTvgId: <%- JSON.stringify(t('schedule.no_tvg_id')) %>,
+    empty: <%- JSON.stringify(t('schedule.empty')) %>,
+    loading: <%- JSON.stringify(t('schedule.loading')) %>,
+    error: <%- JSON.stringify(t('channels.error')) %>,
+    sending: <%- JSON.stringify(t('tv.sending')) %>,
+    sendOk: <%- JSON.stringify(t('tv.send_ok')) %>,
+    sendFailed: <%- JSON.stringify(t('tv.send_failed')) %>
+  };
+  var vlcDevices = <%- JSON.stringify(vlcDevices) %>;
+  var currentChannelId = null;
+
+  function formatTime(ts) {
+    var d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Mezzanotte LOCALE (non UTC) — vedi nota identica in index.ejs: senza
+  // questo, un utente in un fuso avanti rispetto a UTC nelle prime ore
+  // del mattino locale vedrebbe la programmazione del giorno UTC
+  // precedente, con tutto già segnato come "passato".
+  function localMidnight(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  }
+
+  function formatDayLabel(ts) {
+    return new Date(ts).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function renderSchedule(data) {
+    var panel = document.getElementById('tv-schedule');
+    if (!data.tvgId) {
+      panel.innerHTML = '<p class="text-slate-500 text-sm">' + i18n.noTvgId + '</p>';
+      return;
+    }
+    var html = '<div class="flex items-center justify-between mb-3">';
+    html += '<button type="button" class="text-indigo-400 hover:text-indigo-300 text-xs" onclick="loadSchedule(' + data.prevTs + ')">' + i18n.prevDay + '</button>';
+    html += '<span class="text-slate-300 font-medium text-sm">' + formatDayLabel(data.ts) + '</span>';
+    html += '<button type="button" class="text-indigo-400 hover:text-indigo-300 text-xs" onclick="loadSchedule(' + data.nextTs + ')">' + i18n.nextDay + '</button>';
+    html += '</div>';
+    if (!data.programs.length) {
+      html += '<p class="text-slate-500 text-sm">' + i18n.empty + '</p>';
+    } else {
+      html += '<div class="grid gap-1.5 text-sm">';
+      data.programs.forEach(function (p) {
+        html += '<div class="flex gap-3">';
+        html += '<span class="text-slate-500 font-mono flex-shrink-0">' + formatTime(p.start) + '–' + formatTime(p.stop) + '</span>';
+        html += '<span class="text-slate-200">' + p.title + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    panel.innerHTML = html;
+  }
+
+  function loadSchedule(ts) {
+    var panel = document.getElementById('tv-schedule');
+    panel.innerHTML = '<p class="text-slate-500 text-sm">' + i18n.loading + '</p>';
+    fetch('/channels/' + currentChannelId + '/schedule?ts=' + ts)
+      .then(function (r) { return r.json(); })
+      .then(renderSchedule)
+      .catch(function () { panel.innerHTML = '<p class="text-red-400 text-sm">' + i18n.error + '</p>'; });
+  }
+
+  function renderSendButtons() {
+    var container = document.getElementById('tv-send-buttons');
+    if (!container) return;
+    container.innerHTML = '';
+    vlcDevices.forEach(function (d) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-3 py-1.5';
+      btn.textContent = '📺 ' + d.name;
+      btn.addEventListener('click', function () { sendToDevice(d.id, d.name, btn); });
+      container.appendChild(btn);
+    });
+  }
+
+  function sendToDevice(deviceId, deviceName, btn) {
+    var statusEl = document.getElementById('tv-send-status');
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = i18n.sending;
+    statusEl.textContent = '';
+    fetch('/tv/' + currentChannelId + '/send/' + deviceId, { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          statusEl.textContent = '✓ ' + i18n.sendOk.replace('{device}', deviceName);
+          statusEl.className = 'text-xs mt-2 text-emerald-400';
+        } else {
+          statusEl.textContent = '✗ ' + i18n.sendFailed;
+          statusEl.className = 'text-xs mt-2 text-red-400';
+        }
+      })
+      .catch(function () {
+        statusEl.textContent = '✗ ' + i18n.sendFailed;
+        statusEl.className = 'text-xs mt-2 text-red-400';
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.textContent = original;
+      });
+  }
+
+  function openTvModal(id, name) {
+    currentChannelId = id;
+    document.getElementById('tv-modal-overlay').classList.remove('hidden');
+    document.getElementById('tv-modal-name').textContent = name;
+    document.getElementById('tv-player-frame').src = '/watch/' + id + '?embed=1';
+    document.getElementById('tv-player-frame').style.height = '480px';
+    var sendStatusEl = document.getElementById('tv-send-status');
+    if (sendStatusEl) sendStatusEl.textContent = '';
+    renderSendButtons();
+    loadSchedule(localMidnight(new Date()));
+  }
+
+  function closeTvModal() {
+    document.getElementById('tv-modal-overlay').classList.add('hidden');
+    document.getElementById('tv-player-frame').src = 'about:blank';
+    currentChannelId = null;
+  }
+
+  document.querySelectorAll('[data-tv-card]').forEach(function (card) {
+    card.addEventListener('click', function () {
+      openTvModal(card.getAttribute('data-tv-card'), card.getAttribute('data-tv-name'));
+    });
+  });
+
+  document.getElementById('tv-modal-overlay').addEventListener('click', function (e) {
+    if (e.target === e.currentTarget) closeTvModal();
+  });
+
+  // Riceve l'altezza reale del contenuto da watch.ejs (vedi lo script lì,
+  // attivo solo in modalità embed) e ridimensiona l'iframe di conseguenza
+  // — niente più scroll interno o altezza fissa indovinata.
+  window.addEventListener('message', function (event) {
+    if (event.origin !== window.location.origin) return;
+    if (event.data && event.data.type === 'acestream-embed-height') {
+      var frame = document.getElementById('tv-player-frame');
+      if (frame) frame.style.height = Math.max(300, event.data.height) + 'px';
+    }
+  });
+</script>

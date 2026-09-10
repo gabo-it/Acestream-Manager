@@ -1,5 +1,7 @@
 <div class="max-w-3xl mx-auto">
-  <h1 class="text-xl font-bold mb-4"><%= channel.name %></h1>
+  <% if (!embed) { %>
+    <h1 class="text-xl font-bold mb-4"><%= channel.name %></h1>
+  <% } %>
 
   <div class="rounded-lg border border-amber-900 bg-amber-950/30 text-amber-300 px-4 py-3 text-sm mb-4">
     <%= t('watch.browser_compat_banner') %>
@@ -235,3 +237,26 @@
     window.addEventListener('beforeunload', destroyPlayer);
   })();
 </script>
+
+<% if (embed) { %>
+<script>
+  // Comunica al genitore (che ci incorpora in un iframe, es. il tab TV)
+  // l'altezza reale del contenuto, così può ridimensionare l'iframe di
+  // conseguenza invece di tagliarci dentro un riquadro di altezza fissa
+  // indovinata — niente più scroll interno. ResizeObserver reagisce da
+  // solo a qualunque cambiamento (es. la comparsa del box errore),
+  // senza bisogno di richiamarlo manualmente ad ogni singolo stato.
+  (function () {
+    function sendHeight() {
+      window.parent.postMessage({ type: 'acestream-embed-height', height: document.body.scrollHeight }, window.location.origin);
+    }
+    if (window.ResizeObserver) {
+      new ResizeObserver(sendHeight).observe(document.body);
+    } else {
+      window.addEventListener('load', sendHeight);
+      setInterval(sendHeight, 1000); // fallback per browser molto datati senza ResizeObserver
+    }
+    sendHeight();
+  })();
+</script>
+<% } %>

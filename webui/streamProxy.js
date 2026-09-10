@@ -26,11 +26,11 @@ function pipeUpstream(upstream, res) {
   // ravvicinati lato client (player web), più richieste sovrapposte
   // aumentano la probabilità che questo capiti.
   nodeStream.on('error', (err) => {
-    console.error('[stream-proxy] errore nello stream in pipe:', err.message);
+    console.error('[stream-proxy] error piping stream:', err.message);
     if (!res.writableEnded) res.end();
   });
   res.on('error', (err) => {
-    console.error('[stream-proxy] errore sulla risposta:', err.message);
+    console.error('[stream-proxy] response error:', err.message);
     nodeStream.destroy();
   });
   nodeStream.pipe(res);

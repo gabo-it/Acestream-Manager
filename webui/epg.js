@@ -2,6 +2,26 @@ const { XMLParser } = require('fast-xml-parser');
 const { db, getSetting, setSetting } = require('./db');
 const { translateBatch, getLibreTranslateUrl } = require('./translator');
 
+db.exec(`
+CREATE TABLE IF NOT EXISTS epg_source_stats (
+  url TEXT PRIMARY KEY,
+  last_fetch_at INTEGER,
+  program_count INTEGER,
+  last_error TEXT
+);
+`);
+
+function upsertSourceStats(url, { programCount, error }) {
+  db.prepare(
+    `INSERT INTO epg_source_stats (url, last_fetch_at, program_count, last_error) VALUES (?, ?, ?, ?)
+     ON CONFLICT(url) DO UPDATE SET last_fetch_at = excluded.last_fetch_at, program_count = excluded.program_count, last_error = excluded.last_error`
+  ).run(url, Date.now(), programCount ?? null, error || null);
+}
+
+function getSourceStats(url) {
+  return db.prepare('SELECT * FROM epg_source_stats WHERE url = ?').get(url) || null;
+}
+
 // I limiti di espansione entità di default (introdotti da fast-xml-parser
 // come protezione contro attacchi XML entity-bomb) sono pensati per input
 // arbitrario/non fidato. Le nostre fonti EPG sono URL scelti esplicitamente
@@ -54,7 +74,7 @@ async function fetchXmltv(url) {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const xml = await res.text();
-  if (!xml.includes('<tv')) throw new Error('la risposta non sembra un XMLTV valido');
+  if (!xml.includes('<tv')) throw new Error('response does not look like valid XMLTV');
   return parser.parse(xml);
 }
 
@@ -164,7 +184,7 @@ async function refreshEpg() {
   const urlsRaw = getSetting('epg_urls', '');
   const urls = urlsRaw.split(/[\n,]+/).map((u) => u.trim()).filter(Boolean);
   if (urls.length === 0) {
-    setSetting('epg_last_result', 'Nessuna sorgente EPG configurata.');
+    setSetting('epg_last_result', 'No EPG source configured.');
     return { imported: 0, sources: 0, errors: [] };
   }
 
@@ -204,9 +224,11 @@ async function refreshEpg() {
       if (countForSource === 0) {
         errors.push(`${url}: nessun <programme> valido trovato (controlla il formato)`);
       }
+      upsertSourceStats(url, { programCount: countForSource, error: countForSource === 0 ? 'nessun programma valido' : null });
     } catch (err) {
-      console.error(`[epg] Errore importando ${url}:`, err.message);
+      console.error(`[epg] Error importing ${url}:`, err.message);
       errors.push(`${url}: ${err.message}`);
+      upsertSourceStats(url, { programCount: null, error: err.message });
     }
   }
 
@@ -221,8 +243,8 @@ async function refreshEpg() {
   // esaurita) non deve costare la perdita di dati sulle altre.
   if (errors.length > 0) {
     const summary =
-      `Aggiornamento parziale o fallito, mantenuta l'EPG precedente per intero — problemi: ${errors.join(' | ')}` +
-      ` (${new Date().toLocaleString('it-IT')})`;
+      `Partial or failed update, kept the previous EPG entirely — issues: ${errors.join(' | ')}` +
+      ` (${new Date().toLocaleString('en-US')})`;
     setSetting('epg_last_result', summary);
     console.warn(`[epg] ${summary}`);
     return { imported: 0, sources: urls.length, errors, keptPrevious: true };
@@ -252,9 +274,9 @@ async function refreshEpg() {
   replaceAll(allPrograms);
 
   const summary =
-    `${allPrograms.length} programmi importati da ${urls.length} sorgenti` +
-    (errors.length ? ` — problemi: ${errors.join(' | ')}` : '') +
-    ` (${new Date().toLocaleString('it-IT')})`;
+    `${allPrograms.length} programs imported from ${urls.length} sources` +
+    (errors.length ? ` — issues: ${errors.join(' | ')}` : '') +
+    ` (${new Date().toLocaleString('en-US')})`;
   setSetting('epg_last_result', summary);
 
   console.log(`[epg] ${summary}`);
@@ -264,7 +286,7 @@ async function refreshEpg() {
   // traduzione in blocco finisca, che con molti titoli può richiedere
   // diversi minuti.
   translateProgramTitlesInBackground().catch((err) =>
-    console.error('[epg] traduzione in background fallita:', err.message)
+    console.error('[epg] background translation failed:', err.message)
   );
 
   return { imported: allPrograms.length, sources: urls.length, errors };
@@ -287,16 +309,14 @@ function getNowNext(tvgId) {
 // già stati normalizzati in timestamp assoluti durante l'import, è
 // un'approssimazione semplice e deterministica (può differire di qualche
 // ora dall'ora locale dell'utente a seconda del fuso della sorgente EPG).
-function getProgramsForDay(tvgId, dateStr) {
+function getProgramsForDay(tvgId, dayStartTs) {
   if (!tvgId) return [];
-  const dayStart = Date.parse(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(dayStart)) return [];
-  const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+  const dayEnd = dayStartTs + 24 * 60 * 60 * 1000;
   return db
     .prepare(
       'SELECT * FROM programs WHERE tvg_id = ? AND start_ts < ? AND stop_ts > ? ORDER BY start_ts'
     )
-    .all(tvgId, dayEnd, dayStart);
+    .all(tvgId, dayEnd, dayStartTs);
 }
 
-module.exports = { refreshEpg, getNowNext, getProgramsForDay, getTranslationWindowBounds };
+module.exports = { refreshEpg, getNowNext, getProgramsForDay, getTranslationWindowBounds, getSourceStats };

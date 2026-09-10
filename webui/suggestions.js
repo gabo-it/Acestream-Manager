@@ -120,7 +120,7 @@ async function suggestTvgIds(channelName, limit = 5) {
       translationAttempts += 1;
       const translated = await translateText(c.display_name, 'en');
       if (translated === c.display_name) {
-        console.warn(`[suggestions] traduzione non riuscita per "${c.display_name}" (lingua rilevata: ${sourceLang}) — nessun punteggio da questa via`);
+        console.warn(`[suggestions] translation failed for "${c.display_name}" (detected language: ${sourceLang}) — no score from this route`);
         return { tvgId: c.tvg_id, displayName: c.display_name, logoUrl, score: 0 };
       }
       const score = similarity(channelName, translated);
@@ -165,7 +165,7 @@ async function suggestLogosFromSearch(channelName, limit = 5) {
       suggestions.push(r);
     }
   } catch (err) {
-    console.error('[suggestions] ricerca tv-logos fallita:', err.message);
+    console.error('[suggestions] tv-logos search failed:', err.message);
   }
 
   if (suggestions.length < limit) {
@@ -183,7 +183,7 @@ async function suggestLogosFromSearch(channelName, limit = 5) {
         if (suggestions.length >= limit) break;
       }
     } catch (err) {
-      console.error('[suggestions] ricerca AceStream fallita:', err.message);
+      console.error("[suggestions] AceStream search failed:", err.message);
     }
   }
 

@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/docker-build.yml)
 
-Self-hosted, self-maintained Docker stack for AceStream — full control over your own streaming setup, no third-party servers involved: **multi-client streaming** via a CI-rebuilt engine and proxy, **smart channel/EPG matching** that works even across alphabets, **dual TS/HLS playlists**, and **AceStream search with bulk import** — all from one web app.
+Self-hosted, self-maintained Docker stack for AceStream — full control over your own streaming setup, no third-party servers involved: **multi-client streaming** via a CI-rebuilt engine and proxy, **smart channel/EPG matching** that works even across alphabets, a **Live TV view** with now/next info per channel, **AceStream search with bulk import**, and **active integrations** (VLC remote control, Jellyfin, optional Cloudflare WARP) with a **LAN scanner** to find devices — all from one web app.
 
 Found a bug? [Open an issue](https://github.com/gabo-it/Acestream-Manager/issues). Have a suggestion or question? [Start a discussion](https://github.com/gabo-it/Acestream-Manager/discussions).
 
@@ -23,23 +23,29 @@ Donations don't fund further development — this project is maintained regardle
 
 <table>
 <tr>
-<td align="center"><b>Home</b><br><a href="images/home.png"><img src="images/home.png" width="200"></a></td>
-<td align="center"><b>Home</b><br><a href="images/home2.png"><img src="images/home2.png" width="200"></a></td>
+<td align="center"><b>Dashboard</b><br><a href="images/home.png"><img src="images/home.png" width="200"></a></td>
+<td align="center"><b>Dashboard</b><br><a href="images/home2.png"><img src="images/home2.png" width="200"></a></td>
 <td align="center"><b>Webplay</b><br><a href="images/webplay.png"><img src="images/webplay.png" width="200"></a></td>
-<td align="center"><b>Search</b><br><a href="images/search.png"><img src="images/search.png" width="200"></a></td>
-<td align="center"><b>Football Fixtures</b><br><a href="images/fixtures.png"><img src="images/fixtures.png" width="200"></a></td>
 </tr>
 <tr>
-<td align="center"><b>Sources 1</b><br><a href="images/sources1.png"><img src="images/sources1.png" width="200"></a></td>
-<td align="center"><b>Sources 2</b><br><a href="images/sources2.png"><img src="images/sources2.png" width="200"></a></td>
-<td align="center"><b>Settings</b><br><a href="images/settings.png"><img src="images/settings.png" width="200"></a></td>
-<td align="center"><b>Engine</b><br><a href="images/engine.png"><img src="images/engine.png" width="200"></a></td>
+<td align="center"><b>Sources 1</b><br><a href="images/search.png"><img src="images/search.png" width="200"></a></td>
+<td align="center"><b>Search</b><br><a href="images/channels.png"><img src="images/channels.png" width="200"></a></td>
+<td align="center"><b>Settings</b><br><a href="images/sources1.png"><img src="images/sources1.png" width="200"></a></td>
 </tr>
 </table>
+
+> [!NOTE]
+> These screenshots predate several redesigns (sidebar navigation, Live TV, Dashboard, the Engine tab's removal) — they still show the general idea, but some details no longer match the current UI exactly.
 
 ---
 
 ## ✨ Features
+
+### 🏠 Dashboard
+Landing page: channel/EPG-source/VLC-device counts, upcoming programs in the next 2 hours, recently added channels, last EPG refresh status — all clickable through to the relevant section
+
+### 📡 Live TV
+One row per channel with what's on now and what's next right alongside it — click a row to open a modal with the web player, full daily schedule, and one-click casting to any configured VLC device
 
 ### 📺 Channels
 CRUD, search, bulk select/delete · online/offline status check (single or all at once) · import from URL, pasted M3U, or uploaded file (per-source auto-refresh schedule, with a picker to choose what to import) · link alternate streams to a shared EPG · automatic tvg-id/logo suggestions — even across alphabets (e.g. Cyrillic ↔ Latin), plus a manual EPG search that always works regardless of automatic matching · play via the built-in web player, a one-click `.m3u` download for VLC, an AcePlayer link, or copy the direct link
@@ -47,11 +53,11 @@ CRUD, search, bulk select/delete · online/offline status check (single or all a
 ### 🔍 Search
 AceStream's own search API with category filtering — select and bulk-import results with one click, same playback options as regular channels
 
-### 📅 EPG
-Auto-import from XMLTV sources, configurable refresh interval · keeps the last good guide if any source fails or hits a rate limit · expandable daily schedule per channel with previous/next-day navigation · optional program-title translation (Italian/English/French/Spanish) via a self-hosted [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) instance you point the stack at — no third-party service involved, off by default, CPU/RAM-capped so it can't overwhelm a shared host; separate toggles for web UI translation (cache-only, never blocks page loads) and the /epg.xml export (configurable day-window, off by default beyond it)
+### 📃 Playlist
+MPEG-TS (via acexy, multi-client) and HLS (native engine endpoint) links, plus the combined EPG XMLTV export · EPG sources shown one per row with real per-source stats (last fetch time, program count, or the specific error if one failed) and a one-click add — not a wall of text to edit · optional program-title translation (English/Italian/French/Spanish) via a self-hosted [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) instance, CPU/RAM-capped so it can't overwhelm a shared host
 
-### 📃 Playlists
-Two auto-generated variants: MPEG-TS via acexy (recommended, multi-client) and HLS via the native engine endpoint (experimental)
+### 🔌 Add-Ons
+**VLC**: control remote VLC instances via their native HTTP interface — cast any channel to them with one click from Live TV. **Jellyfin**: active control via its REST API — test the connection and trigger a library refresh directly, plus the M3U/XMLTV URLs for its native Live TV tuner setup. **LAN scanner**: find VLC/Jellyfin candidates on your network by IP range instead of typing addresses by hand (Jellyfin candidates are verified against its public server-info endpoint, not just "something answered this port"). **Cloudflare WARP** *(optional, off by default)*: status check for the webui's own outbound requests — never routes AceStream/acexy traffic
 
 ### ⚽ Football *(experimental)*
 Search a team through a local index built from major league standings, browse matches, and see broadcasters grouped by country
@@ -60,7 +66,7 @@ Search a team through a local index built from major league standings, browse ma
 Live peers/speed for any stream (optionally pointing at a different engine), plus a list of streams currently playing through this web UI
 
 ### 🌍 Everything else
-Italian/English interface · one-click configuration export/import · weekly engine image rebuilds via GitHub Actions · all AceStream caching kept in RAM
+One-click configuration export/import · weekly engine image rebuilds via GitHub Actions · all AceStream caching kept in RAM
 
 ---
 
@@ -97,8 +103,7 @@ services:
       HTTP_PORT: "6677"
       PORT: "44556"
       ACCESS_TOKEN: ""          # set this if this port is reachable beyond your LAN
-      # Everything else the engine supports goes in this one line — add,
-      # remove, or change any official flag directly here. Reference:
+      # Any official engine flag goes in this one line — reference:
       # https://docs.acestream.net/developers/engine-command-line-options/
       ENGINE_FLAGS: "--client-console --bind-all --live-cache-type memory"
     expose:
@@ -154,32 +159,48 @@ services:
     networks:
       - acestream-net
 
-  # Optional: self-hosted translation engine for EPG program-title
-  # translation and cross-alphabet tvg-id/logo matching — no third-party
-  # service, everything stays on your own hardware. Disabled by default;
-  # start it alongside the rest with: docker compose --profile translate up -d
-  # Once running, set Sources → "LibreTranslate URL" to http://libretranslate:5000
+  # Optional: self-hosted EPG translation / cross-alphabet matching.
+  # Disabled by default: docker compose --profile translate up -d
+  # Then: Playlist → "LibreTranslate URL" → http://libretranslate:5000
   libretranslate:
     image: libretranslate/libretranslate:latest
     container_name: libretranslate
     restart: unless-stopped
     profiles: ["translate"]
     environment:
-      # Loads only these languages (~200MB RAM each) instead of all 30+
-      # (several GB) — adjust to your EPG sources' actual languages.
+      # ~200MB RAM per language loaded — adjust to your actual EPG languages.
       LT_LOAD_ONLY: en,it,ru
     volumes:
       - libretranslate-models:/home/libretranslate/.local
     networks:
       - acestream-net
-    # Prevents this from pegging every CPU core / eating all RAM on a
-    # shared host (translation is real neural inference) — edit these two
-    # values directly to match your hardware, no .env needed.
+    # Edit directly to match your hardware — no .env needed.
     deploy:
       resources:
         limits:
           cpus: '1'
           memory: 1G
+
+  # Optional: Cloudflare WARP for the webui's own outbound requests only —
+  # not connected to AceStream/acexy traffic, nothing routed through it yet.
+  # ⚠️ Requires NET_ADMIN — a much broader permission than anything else here.
+  # Disabled by default: docker compose --profile warp up -d
+  warp:
+    image: caomingjun/warp
+    container_name: warp
+    restart: unless-stopped
+    profiles: ["warp"]
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      - WARP_SLEEP=2
+    volumes:
+      - warp-data:/var/lib/cloudflare-warp
+    networks:
+      - acestream-net
 
 networks:
   acestream-net:
@@ -188,6 +209,7 @@ networks:
 volumes:
   webui-data:
   libretranslate-models:
+  warp-data:
 ```
 
 - Web UI: http://localhost:4000
@@ -195,7 +217,7 @@ volumes:
 - EPG XMLTV: http://localhost:4000/epg.xml
 
 > [!NOTE]
-> `docker compose up -d` alone starts the three core services only — `libretranslate` is a separate [profile](https://docs.docker.com/compose/how-tos/profiles/) and stays off unless you explicitly ask for it: `docker compose --profile translate up -d`. Needed only if you want EPG program-title translation or cross-alphabet tvg-id/logo matching (both optional features) — see "Setting up LibreTranslate" in the Troubleshooting section below.
+> `docker compose up -d` alone starts the three core services only — `libretranslate` and `warp` are separate [profiles](https://docs.docker.com/compose/how-tos/profiles/) and stay off unless you explicitly ask for them: `docker compose --profile translate up -d` / `docker compose --profile warp up -d`. Both optional — see "Setting up LibreTranslate" and "Cloudflare WARP" in the Troubleshooting section below.
 
 **Prefer to build from source instead of pulling published images?** Cloning the repo gets you its actual `docker-compose.yml`, which keeps `build:` alongside `image:` for exactly this:
 
@@ -259,7 +281,7 @@ Engine parameters (ports, bandwidth, cache, access token) live in `.env` — edi
 | `ACEXY_CLIENT_EVICTION_TIMEOUT` | `10s` | Raise if brief player hiccups cause visible stutter |
 | `LIBRETRANSLATE_LANGUAGES` | `en,it,ru` | Only relevant with the optional `translate` profile — adjust to your EPG sources' actual languages (each adds ~200MB RAM) |
 
-In the web UI, **Settings** has three separate engine URL fields — each with a live reachability/version indicator next to it: the M3U/TS playlist URL (VLC, AcePlayer — normally acexy), the HTTP playback engine URL used only by the built-in web player (blank = falls back to the M3U URL above; kept separate because the web player's close-together retries need an engine that tolerates overlapping connections, like acexy — pointing it at a plain engine can cause instability even with one viewer), and the public engine URL needed for the HLS playlist to work from other devices. Settings also has configuration export/import. **Sources** has EPG configuration (XMLTV URLs — one per line, refresh interval, program-guide translation) alongside channel source management, since both are about keeping content fresh.
+In the web UI, **Settings** has three separate engine URL fields — each with a live reachability/version indicator next to it: the M3U/TS playlist URL (VLC, AcePlayer — normally acexy), the HTTP playback engine URL used only by the built-in web player (blank = falls back to the M3U URL above; kept separate because the web player's close-together retries need an engine that tolerates overlapping connections, like acexy — pointing it at a plain engine can cause instability even with one viewer), and the public engine URL needed for the HLS playlist to work from other devices. Settings also has configuration export/import. **Sources** is for channel import and channel-source management. **Playlist** has the M3U/HLS/EPG XML links plus EPG configuration (guide URLs — one per line, refresh interval, program-guide translation), since both are about consuming the content the stack produces.
 
 ---
 
@@ -305,6 +327,17 @@ The web player automatically falls back through several strategies before giving
 </details>
 
 <details>
+<summary>Cloudflare WARP (Add-Ons)</summary>
+
+Optional, disabled by default: `docker compose --profile warp up -d`. Only affects the web UI's own outbound requests (EPG source fetching, search) — has nothing to do with AceStream/acexy P2P traffic, and as shipped nothing is actually routed through it yet; Add-Ons → Cloudflare WARP just checks whether the container is reachable and connected.
+
+> [!WARNING]
+> This service requires the `NET_ADMIN` capability — a meaningfully broader Docker permission than anything else in this stack, giving the container real ability to manipulate network rules on the host. Only enable it if you understand and accept that trade-off.
+
+Uses the [caomingjun/warp](https://github.com/cmj2002/warp-docker) image, which exposes a SOCKS5 proxy on port 1080 once connected. If Add-Ons reports "unreachable", check `docker compose logs warp` for connection errors.
+</details>
+
+<details>
 <summary>Web player is unstable (stalls/errors), especially with more than one viewer</summary>
 
 Check Settings → "HTTP playback engine URL". If it's pointed at a plain AceStream engine without multiplexing (not acexy), the web player's own retry logic — which makes closely-spaced, sometimes briefly-overlapping requests — can conflict with itself, since such an engine only tolerates one connection at a time. Point this field at acexy (or leave it blank to fall back to the M3U/TS playlist URL, which is normally acexy already) to fix it. This is expected behavior, not a bug: a non-multiplexing engine trades stability for lower latency, and only really works well with exactly one connection at a time.
@@ -347,13 +380,13 @@ Adjust the language list to whatever your EPG sources actually use. First start 
 > [!WARNING]
 > Keep `--cpus`/`--memory` (or the equivalent `deploy.resources.limits` if you added it to this project's own compose file, which already includes them) — translation is genuine neural inference and, without a cap, a large batch can peg every CPU core available. On a shared host (e.g. a Proxmox node running other VMs/containers), this has been observed to starve the *entire physical machine*, not just this container. Don't remove the limits to "make it faster" — resize them instead if 1 CPU / 1GB isn't enough for your language set.
 
-Two independent settings in the web UI control what actually gets translated (both under "Translate in the web UI" / "Translate /epg.xml" in Sources): the channel list and Schedule panel only ever read from a local cache and never wait on a live LibreTranslate call, so they stay instant regardless of how busy LibreTranslate is — a title not yet cached simply shows in its original language until the next EPG refresh catches up. The `/epg.xml` export works the same way, additionally limited to a configurable "Days to translate" window so a guide covering many future days doesn't force translating the entire archive.
+Two independent settings in the web UI control what actually gets translated (both under "Translate in the web UI" / "Translate /epg.xml" in Playlist): the channel list and Schedule panel only ever read from a local cache and never wait on a live LibreTranslate call, so they stay instant regardless of how busy LibreTranslate is — a title not yet cached simply shows in its original language until the next EPG refresh catches up. The `/epg.xml` export works the same way, additionally limited to a configurable "Days to translate" window so a guide covering many future days doesn't force translating the entire archive.
 </details>
 
 <details>
 <summary>tvg-id/logo suggestions don't find a match for a channel</summary>
 
-Cross-alphabet matching (e.g. a channel named in Latin script vs. an EPG entry in Cyrillic/Arabic/etc.) requires a LibreTranslate URL configured in Sources — without one, only same-alphabet matches are attempted. Even configured, it can occasionally miss due to spelling variants. The **manual search box** inside the suggestion panel always works regardless — type any part of the name in any alphabet and pick directly from the imported EPG.
+Cross-alphabet matching (e.g. a channel named in Latin script vs. an EPG entry in Cyrillic/Arabic/etc.) requires a LibreTranslate URL configured in Playlist — without one, only same-alphabet matches are attempted. Even configured, it can occasionally miss due to spelling variants. The **manual search box** inside the suggestion panel always works regardless — type any part of the name in any alphabet and pick directly from the imported EPG.
 </details>
 
 <details>
@@ -368,7 +401,7 @@ Very common, well-documented GHCR issue — almost always a leftover package not
 <details>
 <summary>A channel's EPG preview stays empty even after applying a tvg-id suggestion</summary>
 
-Check Sources → "Last EPG update": if it lists an error for one of your XMLTV URLs, that whole source failed to parse — its channels' programs never got imported, even though the overall refresh reports partial success from the other sources. A common one: `Entity expansion limit exceeded` (some XMLTV feeds, e.g. German ones from open-epg.com, define more entities than the XML parser's default safety limit allows) — already raised in this project, but if you hit a similar error on a different feed, the limits are configurable in `epg.js`. Separately, an empty "now" preview can also just mean the guide has a genuine gap at the current hour — check the channel's "Schedule" panel for today to tell the two apart.
+Check Playlist → "Last EPG update": if it lists an error for one of your XMLTV URLs, that whole source failed to parse — its channels' programs never got imported, even though the overall refresh reports partial success from the other sources. A common one: `Entity expansion limit exceeded` (some XMLTV feeds, e.g. German ones from open-epg.com, define more entities than the XML parser's default safety limit allows) — already raised in this project, but if you hit a similar error on a different feed, the limits are configurable in `epg.js`. Separately, an empty "now" preview can also just mean the guide has a genuine gap at the current hour — check the channel's "Schedule" panel for today to tell the two apart.
 </details>
 
 <details>
@@ -395,7 +428,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v2.3-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

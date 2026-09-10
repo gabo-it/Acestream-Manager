@@ -1,20 +1,33 @@
 require('dotenv').config();
+require('./errorLog').install();
 const express = require('express');
 const multer = require('multer');
 const cron = require('node-cron');
 const { db, getSetting, setSetting } = require('./db');
-const { refreshEpg, getNowNext } = require('./epg');
+const { refreshEpg, getNowNext, getSourceStats } = require('./epg');
 const { buildM3U, buildXmltv } = require('./playlist');
 const { scrapeUrl, importChannels, refreshSource, refreshAllSources, refreshDueSources } = require('./scraper');
 const { parseM3U } = require('./m3u');
 const { checkAndStore, checkAllChannels } = require('./statuscheck');
 const { getEngineParams, getEngineBaseUrl } = require('./engineConfig');
 const { searchAceStream, CATEGORIES } = require('./search');
-const { getTranslator, SUPPORTED_LANGUAGES } = require('./i18n');
+const { getTranslator } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
 const { getCachedTranslations } = require('./translator');
 const { suggestTvgIds, suggestLogosFromSearch } = require('./suggestions');
 const { searchTeams, getTeamMatches, getUpcomingTeamMatches, getBroadcastersByCountry, parseTeamUrl } = require('./football');
+const {
+  listDevices: listVlcDevices,
+  getDevice: getVlcDevice,
+  addDevice: addVlcDevice,
+  deleteDevice: deleteVlcDevice,
+  getStatus: getVlcStatus,
+  playOnDevice: playOnVlcDevice,
+} = require('./vlcRemote');
+const { checkWarpStatus } = require('./warpStatus');
+const { scanForPort, verifyJellyfin } = require('./lanScanner');
+const { getRecent: getRecentIssues } = require('./errorLog');
+const QRCode = require('qrcode');
 const { getStats, stopSession, getStatsEngineUrl, setStatsEngineUrl, isUsingDefaultEngine } = require('./statsProxy');
 const { proxyTs, proxyHlsManifest, proxyHlsPassthrough } = require('./streamProxy');
 const { remuxToFmp4 } = require('./remux');
@@ -35,17 +48,16 @@ const APP_VERSION = require('./package.json').version;
 // passare da render(): senza questo, quei messaggi restavano sempre in
 // italiano anche con la lingua impostata su inglese.
 function reqT() {
-  return getTranslator(getSetting('ui_language', 'en'));
+  return getTranslator();
 }
 
 // Piccolo helper per renderizzare le viste dentro il layout comune.
-// Inietta sempre t()/lang così ogni vista può tradurre senza doverli passare a mano.
+// Inietta sempre t() così ogni vista può tradurre senza doverlo passare a mano.
 // Se locals.titleKey è presente, il <title> del browser viene tradotto di conseguenza.
 function render(res, view, locals = {}) {
-  const lang = getSetting('ui_language', 'en');
-  const t = getTranslator(lang);
+  const t = getTranslator();
   const title = locals.titleKey ? t(locals.titleKey) : locals.title;
-  const fullLocals = { ...locals, title, t, lang, appVersion: APP_VERSION };
+  const fullLocals = { ...locals, title, t, lang: 'en', appVersion: APP_VERSION, embed: locals.embed || false };
   app.render(view, fullLocals, (err, body) => {
     if (err) {
       console.error(err);
@@ -55,21 +67,16 @@ function render(res, view, locals = {}) {
   });
 }
 
-app.get('/lang/:lang', (req, res) => {
-  if (SUPPORTED_LANGUAGES.includes(req.params.lang)) {
-    setSetting('ui_language', req.params.lang);
-  }
-  res.redirect(req.get('Referer') || '/');
-});
-
 // ---------- Canali ----------
 
-app.get('/', async (req, res) => {
-  const q = (req.query.q || '').trim();
-  const channels = q
+// Condivisa tra / (gestione canali) e /tv (vista compatta orientata alla
+// riproduzione) — entrambe mostrano la stessa lista con anteprima
+// now/next, evitando di duplicare la logica di traduzione.
+function getChannelsWithNowNext(searchQuery) {
+  const channels = searchQuery
     ? db
         .prepare('SELECT * FROM channels WHERE name LIKE ? OR category LIKE ? ORDER BY sort_order, name COLLATE NOCASE')
-        .all(`%${q}%`, `%${q}%`)
+        .all(`%${searchQuery}%`, `%${searchQuery}%`)
     : db.prepare('SELECT * FROM channels ORDER BY sort_order, name COLLATE NOCASE').all();
 
   const epgByChannel = {};
@@ -79,13 +86,13 @@ app.get('/', async (req, res) => {
     if (ch.tvg_id) tvgIdCounts[ch.tvg_id] = (tvgIdCounts[ch.tvg_id] || 0) + 1;
   }
 
-  // Titoli "in onda ora" / "a seguire" mostrati nella lista canali, se una
-  // lingua guida è impostata E la checkbox "Traduci nella webui" è attiva
-  // in Sorgenti. Legge SOLO dalla cache (mai una chiamata di rete a
-  // LibreTranslate): questa pagina deve restare sempre istantanea, non
-  // aspettare mai una traduzione in corso. Le vere chiamate di rete
-  // avvengono solo nel job in background (vedi epg.js) — un titolo non
-  // ancora tradotto qui resta nella lingua originale fino al prossimo giro.
+  // Titoli "in onda ora" / "a seguire", se una lingua guida è impostata E
+  // la checkbox "Traduci nella webui" è attiva in Sorgenti. Legge SOLO
+  // dalla cache (mai una chiamata di rete a LibreTranslate): queste
+  // pagine devono restare sempre istantanee, non aspettare mai una
+  // traduzione in corso. Le vere chiamate di rete avvengono solo nel job
+  // in background (vedi epg.js) — un titolo non ancora tradotto qui
+  // resta nella lingua originale fino al prossimo giro.
   const epgLanguage = getSetting('epg_language', '');
   if (epgLanguage && getSetting('epg_translate_ui', '1') === '1') {
     const flatTitles = [];
@@ -108,8 +115,136 @@ app.get('/', async (req, res) => {
     }
   }
 
+  return { channels, epgByChannel, tvgIdCounts };
+}
+
+app.get('/channels', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  const { channels, epgByChannel, tvgIdCounts } = getChannelsWithNowNext(q);
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
   render(res, 'index', { titleKey: 'channels.title', channels, epgByChannel, tvgIdCounts, q, acexyBaseUrl });
+});
+
+// Dashboard: colpo d'occhio su cosa sta succedendo (canali configurati,
+// stato EPG, cosa è in onda ora) più collegamenti rapidi alle altre
+// sezioni — è la nuova pagina di apertura.
+app.get('/', (req, res) => {
+  const channelCount = db.prepare('SELECT COUNT(*) as c FROM channels').get().c;
+  const epgSourceCount = getSetting('epg_urls', '').split(/[\n,]+/).map((u) => u.trim()).filter(Boolean).length;
+  const vlcDeviceCount = listVlcDevices().length;
+  const epgLastResult = getSetting('epg_last_result', '');
+  const libretranslateConfigured = !!getSetting('libretranslate_url', '');
+
+  // "Coming up next": programs starting within the next 2 hours — a
+  // forward-looking view of the schedule.
+  const { channels, epgByChannel } = getChannelsWithNowNext('');
+  const twoHoursMs = 2 * 60 * 60 * 1000;
+  const comingUpNext = channels
+    .filter((ch) => epgByChannel[ch.id] && epgByChannel[ch.id].next && epgByChannel[ch.id].next.start_ts - Date.now() < twoHoursMs)
+    .map((ch) => ({ id: ch.id, name: ch.name, logoUrl: ch.logo_url, next: epgByChannel[ch.id].next }))
+    .sort((a, b) => a.next.start_ts - b.next.start_ts)
+    .slice(0, 6);
+
+  // Recently added channels — the library view, distinct from the
+  // schedule-based widgets above.
+  const recentChannels = db.prepare('SELECT id, name, logo_url FROM channels ORDER BY created_at DESC LIMIT 5').all();
+
+  // Widget "Inventory": colpo d'occhio su cosa è caricato adesso, tre
+  // gruppi — Streams (righe canale, ognuna un vero acestream_id),
+  // TV channels (identità distinte via tvg_id, dato che più stream
+  // possono essere collegati alla stessa identità come stream
+  // alternativi), Sources and guide (fonti di importazione + EPG).
+  const streamStats = db
+    .prepare(
+      `SELECT
+         COUNT(*) as total,
+         SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online,
+         SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) as offline,
+         SUM(CASE WHEN status = 'unknown' OR status IS NULL THEN 1 ELSE 0 END) as notChecked
+       FROM channels`
+    )
+    .get();
+
+  const tvChannelTotal = db.prepare("SELECT COUNT(DISTINCT tvg_id) as c FROM channels WHERE tvg_id != ''").get().c;
+  const tvChannelActive = db
+    .prepare("SELECT COUNT(DISTINCT tvg_id) as c FROM channels WHERE tvg_id != '' AND status = 'online'")
+    .get().c;
+  const tvChannelWithEpg = db
+    .prepare(
+      `SELECT COUNT(DISTINCT c.tvg_id) as c FROM channels c
+       WHERE c.tvg_id != '' AND EXISTS (SELECT 1 FROM programs p WHERE p.tvg_id = c.tvg_id)`
+    )
+    .get().c;
+  const tvChannelLinked = db
+    .prepare(
+      `SELECT COUNT(*) as c FROM (
+         SELECT tvg_id FROM channels WHERE tvg_id != '' GROUP BY tvg_id HAVING COUNT(*) > 1
+       )`
+    )
+    .get().c;
+
+  const sourceRows = db.prepare('SELECT enabled, last_result FROM sources').all();
+  // Stessa regex già usata in Sources per capire se un risultato indica un
+  // fallimento — riusata qui per coerenza, non una nuova definizione.
+  const sourceFailing = sourceRows.filter((s) => s.enabled && /fallit|errore|error|failed/i.test(s.last_result || '')).length;
+  const sourceEnabled = sourceRows.filter((s) => s.enabled).length;
+
+  const guideChannelsCount = db.prepare('SELECT COUNT(*) as c FROM epg_channels').get().c;
+  const programmesCount = db.prepare('SELECT COUNT(*) as c FROM programs').get().c;
+
+  const inventory = {
+    streamsTotal: streamStats.total,
+    streamsOnline: streamStats.online,
+    streamsOffline: streamStats.offline,
+    streamsNotChecked: streamStats.notChecked,
+    tvTotal: tvChannelTotal,
+    tvActive: tvChannelActive,
+    tvWithEpg: tvChannelWithEpg,
+    tvLinked: tvChannelLinked,
+    sourceUrlsTotal: sourceRows.length,
+    sourceUrlsEnabled: sourceEnabled,
+    sourceUrlsFailing: sourceFailing,
+    epgSourceCount,
+    guideChannels: guideChannelsCount,
+    programmes: programmesCount,
+  };
+
+  render(res, 'dashboard', {
+    titleKey: 'dashboard.title',
+    channelCount,
+    epgSourceCount,
+    vlcDeviceCount,
+    epgLastResult,
+    libretranslateConfigured,
+    comingUpNext,
+    recentChannels,
+    inventory,
+    recentIssues: getRecentIssues(15),
+  });
+});
+
+// Vista compatta orientata alla riproduzione: lista cliccabile con
+// anteprima now/next, click per espandere player web + programmazione
+// completa + invio a dispositivi VLC configurati in Add-Ons.
+app.get('/tv', (req, res) => {
+  const q = (req.query.q || '').trim();
+  const { channels, epgByChannel } = getChannelsWithNowNext(q);
+  render(res, 'tv', { titleKey: 'tv.title', channels, epgByChannel, q, vlcDevices: listVlcDevices() });
+});
+
+// Invia lo stream di un canale (via M3U/TS, stesso URL usato da VLC/AcePlayer
+// esterni) a un dispositivo VLC remoto configurato in Add-Ons.
+app.post('/tv/:id/send/:deviceId', async (req, res) => {
+  const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(req.params.id);
+  if (!channel) return res.json({ ok: false, error: 'channel_not_found' });
+  try {
+    const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
+    const streamUrl = `${acexyBaseUrl}/ace/getstream?id=${encodeURIComponent(channel.acestream_id)}`;
+    await playOnVlcDevice(req.params.deviceId, streamUrl);
+    res.json({ ok: true });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
 
 app.get('/channels/new', (req, res) => {
@@ -128,7 +263,7 @@ app.post('/channels/new', (req, res) => {
   db.prepare(
     'INSERT INTO channels (name, acestream_id, category, logo_url, tvg_id) VALUES (?, ?, ?, ?, ?)'
   ).run(name, acestream_id.toLowerCase(), category || '', logo_url || '', tvg_id || '');
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 app.get('/channels/:id/edit', (req, res) => {
@@ -142,12 +277,12 @@ app.post('/channels/:id/edit', (req, res) => {
   db.prepare(
     'UPDATE channels SET name = ?, acestream_id = ?, category = ?, logo_url = ?, tvg_id = ? WHERE id = ?'
   ).run(name, acestream_id.toLowerCase(), category || '', logo_url || '', tvg_id || '', req.params.id);
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 app.post('/channels/:id/delete', (req, res) => {
   db.prepare('DELETE FROM channels WHERE id = ?').run(req.params.id);
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 app.post('/channels/:id/check-status', async (req, res) => {
@@ -156,19 +291,19 @@ app.post('/channels/:id/check-status', async (req, res) => {
     try {
       await checkAndStore(channel);
     } catch (err) {
-      console.error('[status] errore:', err.message);
+      console.error('[status] error:', err.message);
     }
   }
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 app.post('/channels/check-all', async (req, res) => {
   try {
     await checkAllChannels();
   } catch (err) {
-    console.error('[status] errore verifica di massa:', err.message);
+    console.error('[status] bulk check error:', err.message);
   }
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 app.post('/channels/bulk-delete', (req, res) => {
@@ -179,7 +314,7 @@ app.post('/channels/bulk-delete', (req, res) => {
     const placeholders = ids.map(() => '?').join(',');
     db.prepare(`DELETE FROM channels WHERE id IN (${placeholders})`).run(...ids);
   }
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 // Programmazione giornaliera di un canale (usata dal pannello espandibile in AJAX).
@@ -187,15 +322,25 @@ app.get('/channels/:id/schedule', async (req, res) => {
   const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(req.params.id);
   if (!channel) return res.status(404).json({ error: reqT()('errors.channel_not_found') });
 
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '')
-    ? req.query.date
-    : new Date().toISOString().slice(0, 10);
-
-  if (!channel.tvg_id) {
-    return res.json({ date, tvgId: null, programs: [] });
+  // "ts" è l'epoch ms di mezzanotte LOCALE del giorno richiesto, calcolato
+  // dal browser (che conosce il proprio fuso orario tramite il costruttore
+  // Date locale — noi qui non possiamo saperlo). Prima usavamo una
+  // stringa "YYYY-MM-DD" interpretata come mezzanotte UTC: per un fuso
+  // avanti rispetto a UTC (es. Italia), nelle prime ore del mattino
+  // locale questo faceva ancora riferimento al giorno UTC precedente,
+  // mostrando programmi già conclusi come se fossero ancora da venire.
+  // "date" resta supportato come fallback per URL/bookmark vecchi.
+  let dayStart = parseInt(req.query.ts, 10);
+  if (!Number.isFinite(dayStart)) {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : new Date().toISOString().slice(0, 10);
+    dayStart = Date.parse(`${date}T00:00:00Z`);
   }
 
-  let programs = getProgramsForDay(channel.tvg_id, date).map((p) => ({
+  if (!channel.tvg_id) {
+    return res.json({ ts: dayStart, tvgId: null, programs: [] });
+  }
+
+  let programs = getProgramsForDay(channel.tvg_id, dayStart).map((p) => ({
     title: p.title,
     description: p.description,
     start: p.start_ts,
@@ -216,11 +361,8 @@ app.get('/channels/:id/schedule', async (req, res) => {
     programs = programs.map((p, i) => ({ ...p, title: translatedTitles[i] }));
   }
 
-  const [y, m, d] = date.split('-').map(Number);
-  const prevDate = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
-  const nextDate = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-
-  res.json({ date, prevDate, nextDate, tvgId: channel.tvg_id, programs });
+  const dayMs = 24 * 60 * 60 * 1000;
+  res.json({ ts: dayStart, prevTs: dayStart - dayMs, nextTs: dayStart + dayMs, tvgId: channel.tvg_id, programs });
 });
 
 // Suggerimenti tvg-id basati sull'EPG importato (matching sul nome canale),
@@ -233,7 +375,7 @@ app.get('/channels/:id/tvg-suggestions', async (req, res) => {
   try {
     logoSuggestions = await suggestLogosFromSearch(channel.name);
   } catch (err) {
-    console.error('[suggestions] ricerca loghi fallita:', err.message);
+    console.error('[suggestions] logo search failed:', err.message);
   }
 
   res.json({ suggestions: await suggestTvgIds(channel.name), logoSuggestions });
@@ -260,7 +402,7 @@ app.get('/epg-channels/search', (req, res) => {
 app.post('/channels/:id/tvg-id', (req, res) => {
   const tvgId = (req.body.tvg_id || '').trim();
   const logoUrl = (req.body.logo_url || '').trim();
-  console.log(`[tvg-id] richiesta per canale ${req.params.id}: tvg_id="${tvgId}" logo_url="${logoUrl}" body-ricevuto=`, req.body);
+  console.log(`[tvg-id] request for channel ${req.params.id}: tvg_id="${tvgId}" logo_url="${logoUrl}" body-received=`, req.body);
   let result;
   if (logoUrl) {
     result = db.prepare('UPDATE channels SET tvg_id = ?, logo_url = ? WHERE id = ?').run(tvgId, logoUrl, req.params.id);
@@ -269,10 +411,10 @@ app.post('/channels/:id/tvg-id', (req, res) => {
   }
   console.log(`[tvg-id] righe modificate: ${result.changes}`);
   if (result.changes === 0) {
-    console.warn(`[tvg-id] ATTENZIONE: nessuna riga aggiornata — canale ${req.params.id} non trovato?`);
+    console.warn(`[tvg-id] WARNING: no row updated — channel ${req.params.id} not found?`);
   }
   const after = db.prepare('SELECT id, name, tvg_id, logo_url FROM channels WHERE id = ?').get(req.params.id);
-  console.log('[tvg-id] canale dopo l\'update:', after);
+  console.log('[tvg-id] channel after update:', after);
   res.json({ ok: true, tvgId, logoUrl, changes: result.changes, channel: after });
 });
 
@@ -280,13 +422,13 @@ app.post('/channels/:id/tvg-id', (req, res) => {
 // a differenza della rotta sopra, non tocca il tvg-id già impostato.
 app.post('/channels/:id/logo', (req, res) => {
   const logoUrl = (req.body.logo_url || '').trim();
-  console.log(`[logo] richiesta per canale ${req.params.id}: logo_url="${logoUrl}" body-ricevuto=`, req.body);
+  console.log(`[logo] request for channel ${req.params.id}: logo_url="${logoUrl}" body-received=`, req.body);
   let changes = 0;
   if (logoUrl) {
     const result = db.prepare('UPDATE channels SET logo_url = ? WHERE id = ?').run(logoUrl, req.params.id);
     changes = result.changes;
   } else {
-    console.warn('[logo] logo_url vuoto nella richiesta, nessun aggiornamento');
+    console.warn('[logo] empty logo_url in request, no update');
   }
   console.log(`[logo] righe modificate: ${changes}`);
   res.json({ ok: true, logoUrl, changes });
@@ -315,7 +457,7 @@ app.get('/watch/:id', (req, res) => {
   const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(req.params.id);
   if (!channel) return res.status(404).send(reqT()('errors.channel_not_found'));
   const { tsUrl, tsProxyUrl } = buildStreamUrls(req, channel.acestream_id);
-  render(res, 'watch', { title: channel.name, channel, streamUrl: tsUrl, tsProxyUrl });
+  render(res, 'watch', { title: channel.name, channel, streamUrl: tsUrl, tsProxyUrl, embed: req.query.embed === '1' });
 });
 
 // Come /watch/:id ma per contenuti non ancora salvati come canale (es. un
@@ -380,36 +522,35 @@ app.get('/stream-proxy/fmp4/:id', (req, res) => {
 
 app.get('/sources', (req, res) => {
   const sources = db.prepare('SELECT * FROM sources ORDER BY created_at DESC').all();
-  render(res, 'sources', {
-    titleKey: 'sources.title',
-    sources,
-    epgUrls: getSetting('epg_urls', ''),
-    epgRefreshHours: getSetting('epg_refresh_hours', '6'),
-    epgLastResult: getSetting('epg_last_result', ''),
-    epgLanguage: getSetting('epg_language', ''),
-    libretranslateUrl: getSetting('libretranslate_url', ''),
-    // Default "1" (attivo) per entrambe: chi imposta una lingua guida per
-    // la prima volta si aspetta che faccia qualcosa, senza dover scoprire
-    // due checkbox nascoste. Chi ha un EPG molto grande e vuole evitare il
-    // costo CPU può disattivare quella dell'export in un secondo momento,
-    // con l'avviso ben visibile accanto al campo.
-    epgTranslateUi: getSetting('epg_translate_ui', '1') === '1',
-    epgTranslateXml: getSetting('epg_translate_xml', '1') === '1',
-    epgTranslateDays: getSetting('epg_translate_days', '2'),
-  });
+  render(res, 'sources', { titleKey: 'sources.title', sources });
+});
+
+app.post('/playlist/epg/add-url', (req, res) => {
+  const newUrl = (req.body.url || '').trim();
+  if (newUrl) {
+    const current = getSetting('epg_urls', '')
+      .split(/[\n,]+/)
+      .map((u) => u.trim())
+      .filter(Boolean);
+    if (!current.includes(newUrl)) {
+      current.push(newUrl);
+      setSetting('epg_urls', current.join('\n'));
+    }
+  }
+  res.redirect('/playlist');
+});
+
+app.post('/playlist/epg/remove-url', (req, res) => {
+  const toRemove = (req.body.url || '').trim();
+  const current = getSetting('epg_urls', '')
+    .split(/[\n,]+/)
+    .map((u) => u.trim())
+    .filter((u) => u && u !== toRemove);
+  setSetting('epg_urls', current.join('\n'));
+  res.redirect('/playlist');
 });
 
 app.post('/sources/epg', (req, res) => {
-  // Normalizziamo sempre a una URL per riga, indipendentemente da come
-  // l'utente le ha separate (virgola, a capo, o un misto) — così i dati
-  // salvati in passato con virgole si "ripuliscono" automaticamente al
-  // primo salvataggio, e restano leggibili anche con molte fonti.
-  const epgUrlsNormalized = (req.body.epg_urls || '')
-    .split(/[\n,]+/)
-    .map((u) => u.trim())
-    .filter(Boolean)
-    .join('\n');
-  setSetting('epg_urls', epgUrlsNormalized);
   const hours = Math.max(1, Math.min(24, parseInt(req.body.epg_refresh_hours, 10) || 6));
   setSetting('epg_refresh_hours', String(hours));
   const allowedLangs = new Set(['', 'it', 'en', 'fr', 'es']);
@@ -431,7 +572,7 @@ app.post('/sources/epg', (req, res) => {
   setSetting('epg_translate_ui', req.body.epg_translate_ui ? '1' : '0');
   setSetting('epg_translate_xml', req.body.epg_translate_xml ? '1' : '0');
   scheduleEpgRefresh();
-  res.redirect('/sources');
+  res.redirect('/playlist');
 });
 
 app.post('/sources/epg/refresh', async (req, res) => {
@@ -440,7 +581,7 @@ app.post('/sources/epg/refresh', async (req, res) => {
   } catch (err) {
     console.error(err);
   }
-  res.redirect('/sources');
+  res.redirect('/playlist');
 });
 
 app.post('/sources/new', (req, res) => {
@@ -449,7 +590,7 @@ app.post('/sources/new', (req, res) => {
     try {
       db.prepare('INSERT OR IGNORE INTO sources (url) VALUES (?)').run(url);
     } catch (err) {
-      console.error('[sources] errore inserimento:', err.message);
+      console.error('[sources] insert error:', err.message);
     }
   }
   res.redirect('/sources');
@@ -478,7 +619,7 @@ app.post('/sources/:id/refresh', async (req, res) => {
     try {
       await refreshSource(source);
     } catch (err) {
-      console.error('[sources] refresh fallito:', err.message);
+      console.error('[sources] refresh failed:', err.message);
     }
   }
   res.redirect('/sources');
@@ -526,7 +667,7 @@ app.post('/sources/refresh-all', async (req, res) => {
   try {
     await refreshAllSources();
   } catch (err) {
-    console.error('[sources] refresh-all fallito:', err.message);
+    console.error('[sources] refresh-all failed:', err.message);
   }
   res.redirect('/sources');
 });
@@ -542,17 +683,17 @@ app.post('/import/url', async (req, res) => {
       const rows = await scrapeUrl(url);
       importChannels(rows, null);
     } catch (err) {
-      console.error('[import] errore da URL:', err.message);
+      console.error('[import] error from URL:', err.message);
     }
   }
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 app.post('/import/m3u-text', (req, res) => {
   const text = req.body.m3u_text || '';
   const rows = parseM3U(text);
   if (rows.length) importChannels(rows, null);
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 app.post('/import/m3u-file', upload.single('file'), (req, res) => {
@@ -561,7 +702,7 @@ app.post('/import/m3u-file', upload.single('file'), (req, res) => {
     const rows = parseM3U(text);
     if (rows.length) importChannels(rows, null);
   }
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 // ---------- Ricerca (API AceStream) ----------
@@ -591,7 +732,7 @@ app.post('/search/import', (req, res) => {
       null
     );
   }
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 app.post('/search/import-selected', (req, res) => {
@@ -648,10 +789,138 @@ app.post('/channels/:id/stats/stop', async (req, res) => {
     try {
       await stopSession(channel);
     } catch (err) {
-      console.error('[stats] errore stop:', err.message);
+      console.error('[stats] stop error:', err.message);
     }
   }
   res.json({ ok: true });
+});
+
+// Scansiona un intervallo CIDR per candidati VLC (porta HTTP configurabile,
+// default 8080) — non c'è modo di confermare che sia davvero VLC senza la
+// password, quindi questi sono candidati da verificare, non conferme.
+app.post('/addons/scan/vlc', async (req, res) => {
+  const cidr = (req.body.cidr || '').trim();
+  const port = Math.max(1, Math.min(65535, parseInt(req.body.port, 10) || 8080));
+  try {
+    const found = await scanForPort(cidr, port);
+    res.json({ ok: true, candidates: found.map((ip) => ({ ip, port })) });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// Scansiona un intervallo CIDR per server Jellyfin (porta HTTP
+// configurabile, default 8096) — ogni candidato viene verificato tramite
+// l'endpoint pubblico non autenticato, quindi qui i risultati sono
+// conferme reali, non solo "qualcosa risponde su questa porta".
+app.post('/addons/scan/jellyfin', async (req, res) => {
+  const cidr = (req.body.cidr || '').trim();
+  const port = Math.max(1, Math.min(65535, parseInt(req.body.port, 10) || 8096));
+  try {
+    const candidates = await scanForPort(cidr, port);
+    const verified = (await Promise.all(candidates.map((ip) => verifyJellyfin(ip, port)))).filter(Boolean);
+    res.json({ ok: true, servers: verified });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// ---------- Add-Ons (integrazioni: dispositivi VLC remoti) ----------
+
+app.get('/addons', (req, res) => {
+  const host = req.get('host');
+  render(res, 'addons', {
+    titleKey: 'addons.title',
+    devices: listVlcDevices(),
+    jellyfinTsUrl: `http://${host}/playlist.m3u8`,
+    jellyfinEpgUrl: `http://${host}/epg.xml`,
+    jellyfinServerUrl: getSetting('jellyfin_server_url', ''),
+    jellyfinApiKey: getSetting('jellyfin_api_key', ''),
+  });
+});
+
+app.post('/addons/jellyfin', (req, res) => {
+  setSetting('jellyfin_server_url', normalizeBaseUrl(req.body.jellyfin_server_url, ''));
+  setSetting('jellyfin_api_key', (req.body.jellyfin_api_key || '').trim());
+  res.redirect('/addons');
+});
+
+// Test di connessione reale: chiama /System/Info con la chiave API — se
+// risponde, mostriamo nome/versione del server, prova concreta che le
+// credenziali funzionano (non solo che l'indirizzo è raggiungibile).
+app.post('/addons/jellyfin/test', async (req, res) => {
+  const serverUrl = getSetting('jellyfin_server_url', '');
+  const apiKey = getSetting('jellyfin_api_key', '');
+  if (!serverUrl || !apiKey) return res.json({ ok: false, error: 'not_configured' });
+  try {
+    const r = await fetch(`${serverUrl}/System/Info`, {
+      headers: { 'X-Emby-Token': apiKey },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    res.json({ ok: true, serverName: data.ServerName, version: data.Version });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// Comanda Jellyfin direttamente: forza una scansione libreria (utile
+// dopo aver aggiunto/cambiato canali, così il tuner M3U li rilevi subito
+// invece di aspettare la prossima scansione automatica).
+app.post('/addons/jellyfin/refresh', async (req, res) => {
+  const serverUrl = getSetting('jellyfin_server_url', '');
+  const apiKey = getSetting('jellyfin_api_key', '');
+  if (!serverUrl || !apiKey) return res.json({ ok: false, error: 'not_configured' });
+  try {
+    const r = await fetch(`${serverUrl}/Library/Refresh`, {
+      method: 'POST',
+      headers: { 'X-Emby-Token': apiKey },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/addons/vlc', (req, res) => {
+  const name = (req.body.name || '').trim();
+  const host = (req.body.host || '').trim();
+  const port = Math.max(1, Math.min(65535, parseInt(req.body.port, 10) || 8080));
+  const password = req.body.password || '';
+  if (name && host && password) {
+    addVlcDevice({ name, host, port, password });
+  }
+  res.redirect('/addons');
+});
+
+app.post('/addons/vlc/:id/delete', (req, res) => {
+  deleteVlcDevice(req.params.id);
+  res.redirect('/addons');
+});
+
+// Verifica connessione/password senza controllare la riproduzione (legge
+// solo lo stato attuale) — richiamata via fetch dal JS della pagina.
+app.post('/addons/vlc/:id/test', async (req, res) => {
+  try {
+    const device = getVlcDevice(req.params.id);
+    if (!device) return res.json({ ok: false, error: 'not_found' });
+    await getVlcStatus(device);
+    res.json({ ok: true });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// Verifica se il client WARP (servizio opzionale, profilo "warp" nel
+// compose) è raggiungibile e realmente connesso — nessun traffico della
+// webui viene instradato attraverso di esso, solo questo controllo di
+// stato usa il suo proxy SOCKS5.
+app.get('/addons/warp/status', async (req, res) => {
+  const status = await checkWarpStatus('warp', 1080);
+  res.json(status);
 });
 
 // ---------- Calendario calcio / trasmittenti ----------
@@ -893,28 +1162,62 @@ app.post('/settings/import', upload.single('file'), (req, res) => {
     importTx();
     scheduleEpgRefresh();
   } catch (err) {
-    console.error('[import] errore:', err.message);
+    console.error('[import] error:', err.message);
     return res.status(400).send(`Import fallito: ${err.message}`);
   }
 
-  res.redirect('/');
+  res.redirect('/channels');
 });
 
 // ---------- Playlist / EPG pubblici ----------
 
-app.get('/playlist', (req, res) => {
+app.get('/playlist', async (req, res) => {
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
   const enginePublicUrl = getSetting('engine_public_url', '').replace(/\/$/, '');
   const host = req.get('host');
   const tsUrl = `http://${host}/playlist.m3u8`;
   const hlsUrl = `http://${host}/playlist.m3u8?format=hls`;
+  const epgXmlUrl = `http://${host}/epg.xml`;
+
+  // QR code generati qui (non su richiesta separata): sono piccoli,
+  // veloci da generare, e così la pagina li ha già pronti al primo
+  // caricamento — niente spinner o richiesta aggiuntiva per vederli.
+  const tsQr = await QRCode.toDataURL(tsUrl, { margin: 1, width: 160 });
+  const hlsQr = enginePublicUrl ? await QRCode.toDataURL(hlsUrl, { margin: 1, width: 160 }) : null;
+
+  // Ogni fonte EPG con le sue statistiche (ultimo tentativo, numero di
+  // programmi, eventuale errore) — vedi epg_source_stats in epg.js,
+  // aggiornata ad ogni giro di refresh indipendentemente dal fatto che il
+  // dataset combinato venga tenuto o scartato.
+  const epgUrls = getSetting('epg_urls', '')
+    .split(/[\n,]+/)
+    .map((u) => u.trim())
+    .filter(Boolean)
+    .map((url) => ({ url, stats: getSourceStats(url) }));
+
   render(res, 'playlist', {
     titleKey: 'nav.playlist',
     tsUrl,
     hlsUrl,
+    epgXmlUrl,
+    tsQr,
+    hlsQr,
     acexyBaseUrl,
     enginePublicUrl,
     hlsConfigured: Boolean(enginePublicUrl),
+    epgUrls,
+    epgRefreshHours: getSetting('epg_refresh_hours', '6'),
+    epgLastResult: getSetting('epg_last_result', ''),
+    epgLanguage: getSetting('epg_language', ''),
+    libretranslateUrl: getSetting('libretranslate_url', ''),
+    // Default "1" (attivo) per entrambe: chi imposta una lingua guida per
+    // la prima volta si aspetta che faccia qualcosa, senza dover scoprire
+    // due checkbox nascoste. Chi ha un EPG molto grande e vuole evitare il
+    // costo CPU può disattivare quella dell'export in un secondo momento,
+    // con l'avviso ben visibile accanto al campo.
+    epgTranslateUi: getSetting('epg_translate_ui', '1') === '1',
+    epgTranslateXml: getSetting('epg_translate_xml', '1') === '1',
+    epgTranslateDays: getSetting('epg_translate_days', '2'),
   });
 });
 
@@ -938,23 +1241,23 @@ function scheduleEpgRefresh() {
   const hours = Math.max(1, Math.min(24, parseInt(getSetting('epg_refresh_hours', '6'), 10) || 6));
   if (epgCronTask) epgCronTask.stop();
   epgCronTask = cron.schedule(`0 */${hours} * * *`, () => {
-    refreshEpg().catch((err) => console.error('[epg] refresh fallito:', err));
+    refreshEpg().catch((err) => console.error('[epg] refresh failed:', err));
   });
-  console.log(`[epg] refresh pianificato ogni ${hours}h`);
+  console.log(`[epg] refresh scheduled every ${hours}h`);
 }
 
 scheduleEpgRefresh();
-refreshEpg().catch((err) => console.error('[epg] refresh iniziale fallito:', err));
+refreshEpg().catch((err) => console.error('[epg] initial refresh failed:', err));
 
 // Controlla ogni ora quali sorgenti con auto-refresh impostato sono "dovute"
 // secondo il proprio intervallo individuale (ognuna il suo, non un unico
 // intervallo globale). Le sorgenti manuali non vengono mai toccate qui.
 cron.schedule('7 * * * *', () => {
-  refreshDueSources().catch((err) => console.error('[sources] auto-refresh fallito:', err));
+  refreshDueSources().catch((err) => console.error('[sources] auto-refresh failed:', err));
 });
 
 app.listen(PORT, () => {
-  console.log(`AceStream Manager in ascolto su http://0.0.0.0:${PORT}`);
+  console.log(`AceStream Manager listening on http://0.0.0.0:${PORT}`);
 });
 
 // Rete di sicurezza: un'eccezione non gestita in un punto imprevisto (es.

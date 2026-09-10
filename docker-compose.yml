@@ -1,27 +1,19 @@
 services:
   acestream:
-    # Both image: and build: are set — "docker compose up -d" uses the
-    # published image as-is; "docker compose up -d --build" builds from
-    # ./engine instead (tags the result with the same name as image:, so
-    # it's used going forward without needing --build again).
+    # image: for `up -d`; build: for `up -d --build` (builds from ./engine)
     image: ghcr.io/${GITHUB_OWNER:-gabo-it}/acestream-engine:latest
     build: ./engine
     container_name: acestream-engine
     restart: unless-stopped
-    # All engine parameters below are customizable via environment
-    # variables (defaults shown). Set them in Portainer's stack env vars,
-    # or in a .env file next to this compose file. Any official engine flag
-    # (https://docs.acestream.net/developers/engine-command-line-options/)
-    # not covered by a dedicated variable can be added directly to
-    # ENGINE_FLAGS — no need to add a new variable per flag.
+    # Any official engine flag can go in ENGINE_FLAGS — see:
+    # https://docs.acestream.net/developers/engine-command-line-options/
     environment:
       HTTP_PORT: "${HTTP_PORT:-6677}"
       PORT: "${P2P_PORT:-44556}"
       ACCESS_TOKEN: "${ACCESS_TOKEN:-}"
       ENGINE_FLAGS: "${ENGINE_FLAGS:---client-console --bind-all --live-cache-type memory}"
-    # HTTP port is published (needed for the HLS playlist's native
-    # /ace/manifest.m3u8 endpoint). Set ACCESS_TOKEN above if this host is
-    # reachable beyond your own network.
+    # HTTP port published for the HLS playlist's native /ace/manifest.m3u8.
+    # Set ACCESS_TOKEN above if this host is reachable beyond your LAN.
     expose:
       - "${HTTP_PORT:-6677}"
     ports:
@@ -36,16 +28,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 25s
-    # Keeps all engine caching (live buffer + session state) in RAM instead
-    # of the container's disk-backed writable layer. Resets on restart,
-    # which is fine — it's just P2P session state, not configuration.
+    # RAM-backed cache instead of the container's disk layer — resets on
+    # restart, which is fine (P2P session state, not configuration).
     tmpfs:
       - /srv/ace/.ACEStream:size=512m,mode=1777
 
   acexy:
-    # Pinned (not :latest) deliberately, so an upstream update can't change
-    # behavior without warning. Bump ACEXY_VERSION after checking:
-    # https://github.com/Javinator9889/acexy/releases
+    # Pinned deliberately. Bump after checking: https://github.com/Javinator9889/acexy/releases
     image: ghcr.io/javinator9889/acexy:${ACEXY_VERSION:-0.2.2}
     container_name: acexy
     restart: unless-stopped
@@ -56,19 +45,12 @@ services:
       ACEXY_HOST: acestream
       ACEXY_PORT: "${HTTP_PORT:-6677}"
       ACEXY_LISTEN_ADDR: ":8080"
-      # Raised from acexy's 1s default: the engine often needs longer than
-      # that to find first peers, causing spurious "timeout awaiting
-      # response headers" failures otherwise.
+      # Raised from acexy's 1s default — the engine often needs longer to
+      # find first peers, causing spurious timeout failures otherwise.
       ACEXY_NO_RESPONSE_TIMEOUT: "${ACEXY_NO_RESPONSE_TIMEOUT:-30s}"
-      # Buffer before handing data to the player — raise if playback is
-      # choppy. Upstream (acexy) default: 4.2MiB. Briefly raised to 8MiB
-      # to test a fix for occasional micro-stalls/AV desync, but real-world
-      # testing showed inconsistent results (sometimes better, sometimes
-      # worse) — pointing to P2P peer variability rather than buffer size
-      # as the actual cause. Reverted to the upstream default.
+      # Raise if playback is choppy vs. hitting the engine directly.
       ACEXY_BUFFER_SIZE: "${ACEXY_BUFFER_SIZE:-4.2MiB}"
-      # How long to tolerate a silent client before evicting it — raise if
-      # brief player hiccups cause stutter. Upstream default: 5s.
+      # Raise if brief player hiccups cause stutter.
       ACEXY_CLIENT_EVICTION_TIMEOUT: "${ACEXY_CLIENT_EVICTION_TIMEOUT:-10s}"
     ports:
       - "${ACEXY_PORT_EXPOSED:-8080}:8080"
@@ -76,8 +58,6 @@ services:
       - acestream-net
 
   webui:
-    # Same story as acestream above: image: for pulling as-is, build: for
-    # "docker compose up -d --build" to build from ./webui instead.
     image: ghcr.io/${GITHUB_OWNER:-gabo-it}/acestream-webui:latest
     build: ./webui
     container_name: acestream-webui
@@ -97,47 +77,49 @@ services:
     networks:
       - acestream-net
 
-  # Optional: self-hosted translation engine for EPG program-title
-  # translation and cross-alphabet tvg-id/logo matching — no third-party
-  # service involved, everything stays on your own hardware. Disabled by
-  # default; start it explicitly alongside the rest of the stack with:
-  #   docker compose --profile translate up -d
-  # Once it's running, go to Sources → "LibreTranslate URL" in the web UI
-  # and set it to: http://libretranslate:5000
+  # Optional: self-hosted EPG translation / cross-alphabet matching.
+  # Disabled by default: docker compose --profile translate up -d
+  # Then in the web UI, Playlist → LibreTranslate URL → http://libretranslate:5000
   libretranslate:
     image: libretranslate/libretranslate:latest
     container_name: libretranslate
     restart: unless-stopped
     profiles: ["translate"]
     environment:
-      # Loads only the languages you actually need — each one costs
-      # roughly 200MB of RAM (per LibreTranslate's own sizing guidance).
-      # Loading all 30+ supported languages instead needs several GB.
-      # Defaults below cover this project's four target languages
-      # (it, en, fr, es) plus common EPG source languages — adjust the
-      # list to match whatever your own EPG guides actually use.
+      # ~200MB RAM per language loaded — adjust to your actual EPG languages.
       LT_LOAD_ONLY: "${LIBRETRANSLATE_LANGUAGES:-en,it,ru}"
     volumes:
-      # Caches downloaded language models so they persist across
-      # restarts — without this, every restart re-downloads them (can
-      # take several minutes depending on how many languages are loaded).
       - libretranslate-models:/home/libretranslate/.local
     networks:
       - acestream-net
-    # Translation is genuine neural inference — without a hard cap, a
-    # large batch can peg every CPU core available and, on a shared host
-    # (e.g. a Proxmox node running other VMs/containers), starve
-    # everything else running on that same machine, not just this stack.
-    # Edit the two values below directly to match your own hardware — no
-    # .env file needed for this. 1 CPU / 1GB is a conservative starting
-    # point; raise it if you load more languages, want faster
-    # translation, or see it struggling — lower it further only if this
-    # host is genuinely tight on resources elsewhere.
+    # Edit directly to match your hardware — no .env needed.
     deploy:
       resources:
         limits:
           cpus: '1'
           memory: 1G
+
+  # Optional: Cloudflare WARP for the webui's own outbound requests only —
+  # not connected to AceStream/acexy traffic, nothing routed through it yet.
+  # ⚠️ Requires NET_ADMIN — a much broader permission than anything else in
+  # this stack. Disabled by default: docker compose --profile warp up -d
+  warp:
+    image: caomingjun/warp
+    container_name: warp
+    restart: unless-stopped
+    profiles: ["warp"]
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      - WARP_SLEEP=2
+      # - WARP_LICENSE_KEY=  # optional: WARP+ or WARP Team license
+    volumes:
+      - warp-data:/var/lib/cloudflare-warp
+    networks:
+      - acestream-net
 
 networks:
   acestream-net:
@@ -146,3 +128,4 @@ networks:
 volumes:
   webui-data:
   libretranslate-models:
+  warp-data:

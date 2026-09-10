@@ -86,7 +86,7 @@ async function translateText(text, targetLang) {
     }
     console.error(`[translator] risposta inattesa da LibreTranslate per "${text.slice(0, 60)}":`, JSON.stringify(data).slice(0, 200));
   } catch (err) {
-    console.error(`[translator] errore di rete verso LibreTranslate (${baseUrl}) per "${text.slice(0, 60)}":`, err.message);
+    console.error(`[translator] network error to LibreTranslate (${baseUrl}) for "${text.slice(0, 60)}":`, err.message);
   }
   return text; // fallback: testo originale se la traduzione fallisce
 }
@@ -149,7 +149,7 @@ async function translateBatch(texts, targetLang) {
       if (translated !== text) insert.run(text, langpair, translated);
     });
   } catch (err) {
-    console.error(`[translator] errore di rete verso LibreTranslate (${baseUrl}) in batch:`, err.message);
+    console.error(`[translator] network error to LibreTranslate (${baseUrl}) in batch:`, err.message);
     toTranslate.forEach(({ index, text }) => { results[index] = text; });
   }
   return results;

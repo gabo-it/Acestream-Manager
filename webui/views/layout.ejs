@@ -8,38 +8,127 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
+    .sidebar-link { display: flex; align-items: center; gap: 0.625rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; color: #94a3b8; font-size: 0.875rem; transition: all 0.15s; }
+    .sidebar-link:hover { color: #e2e8f0; background: rgba(30, 41, 59, 0.8); }
+    .sidebar-link.active { color: #a5b4fc; background: rgba(49, 46, 129, 0.4); font-weight: 500; }
+    .sidebar-group-label { padding: 0 0.75rem; margin-bottom: 0.25rem; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }
   </style>
   <script src="/copy.js"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-  <nav class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-2">
-      <a href="/" class="flex items-center gap-2 font-semibold text-lg">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-indigo-400">
-          <rect x="2" y="7" width="20" height="14" rx="2"></rect>
-          <polyline points="17 2 12 7 7 2"></polyline>
-        </svg>
-        AceStream Manager
-      </a>
-      <div class="flex items-center gap-4 text-sm">
-        <a href="/" class="hover:text-indigo-400 transition"><%= t('nav.channels') %></a>
-        <a href="/sources" class="hover:text-indigo-400 transition"><%= t('nav.sources') %></a>
-        <a href="/search" class="hover:text-indigo-400 transition"><%= t('nav.search') %></a>
-        <a href="/football" class="hover:text-indigo-400 transition"><%= t('nav.football') %></a>
-        <a href="/stats" class="hover:text-indigo-400 transition"><%= t('nav.stats') %></a>
-        <a href="/settings" class="hover:text-indigo-400 transition"><%= t('nav.settings') %></a>
-        <a href="/playlist" class="hover:text-indigo-400 transition"><%= t('nav.playlist') %></a>
-        <a href="/epg.xml" class="hover:text-indigo-400 transition"><%= t('nav.epg') %></a>
-        <span class="flex items-center gap-1 text-xs border-l border-slate-800 pl-3">
-          <a href="/lang/it" class="<%= lang === 'it' ? 'text-indigo-400 font-medium' : 'text-slate-500 hover:text-indigo-400' %>">IT</a>
-          <span class="text-slate-700">|</span>
-          <a href="/lang/en" class="<%= lang === 'en' ? 'text-indigo-400 font-medium' : 'text-slate-500 hover:text-indigo-400' %>">EN</a>
-        </span>
+<% if (!embed) { %>
+  <div class="lg:flex">
+    <!-- Overlay mobile, per chiudere la sidebar toccando fuori -->
+    <div id="sidebar-overlay" class="hidden fixed inset-0 bg-black/60 z-20 lg:hidden"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-64 flex-shrink-0 bg-slate-900 border-r border-slate-800 fixed lg:sticky top-0 h-screen overflow-y-auto z-30 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+      <div class="p-4 border-b border-slate-800">
+        <a href="/" class="flex items-center gap-2.5 font-bold text-base tracking-tight">
+          <span class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-md shadow-indigo-950/60 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.25"
+                 stroke-linecap="round" stroke-linejoin="round" class="w-4.5 h-4.5">
+              <rect x="2" y="7" width="20" height="14" rx="2"></rect>
+              <polyline points="17 2 12 7 7 2"></polyline>
+            </svg>
+          </span>
+          AceStream Manager
+        </a>
       </div>
+
+      <nav class="p-3">
+        <div class="mb-5">
+          <a href="/" data-nav data-nav-exact class="sidebar-link">🏠 <%= t('nav.dashboard') %></a>
+        </div>
+
+        <div class="mb-5">
+          <div class="sidebar-group-label"><%= t('nav.group_watch') %></div>
+          <a href="/tv" data-nav class="sidebar-link">📺 <%= t('nav.tv') %></a>
+        </div>
+
+        <div class="mb-5">
+          <div class="sidebar-group-label"><%= t('nav.group_manage') %></div>
+          <a href="/channels" data-nav class="sidebar-link">🗂️ <%= t('nav.channels') %></a>
+          <a href="/sources" data-nav class="sidebar-link">📡 <%= t('nav.sources') %></a>
+          <a href="/search" data-nav class="sidebar-link">🔍 <%= t('nav.search') %></a>
+          <a href="/football" data-nav class="sidebar-link">⚽ <%= t('nav.football') %></a>
+          <a href="/playlist" data-nav class="sidebar-link">📃 <%= t('nav.playlist') %></a>
+        </div>
+
+        <div>
+          <div class="sidebar-group-label"><%= t('nav.group_system') %></div>
+          <a href="/addons" data-nav class="sidebar-link">🔌 <%= t('nav.addons') %></a>
+          <a href="/stats" data-nav class="sidebar-link">📊 <%= t('nav.stats') %></a>
+          <a href="/settings" data-nav class="sidebar-link">⚙️ <%= t('nav.settings') %></a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Contenuto principale -->
+    <div class="flex-1 min-w-0">
+      <!-- Barra superiore, solo mobile: bottone per aprire la sidebar -->
+      <div class="lg:hidden sticky top-0 z-10 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center gap-3">
+        <button id="sidebar-toggle" class="text-slate-400 hover:text-white transition" aria-label="Menu">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <span class="font-semibold">AceStream Manager</span>
+      </div>
+
+      <main class="max-w-6xl mx-auto px-4 py-8">
+        <% if (typeof flash !== 'undefined' && flash) { %>
+          <div class="mb-6 rounded-lg border border-indigo-800 bg-indigo-950/50 text-indigo-200 px-4 py-3 text-sm">
+            <%= flash %>
+          </div>
+        <% } %>
+        <%- body %>
+      </main>
+
+      <footer class="max-w-6xl mx-auto px-4 py-8 mt-8 border-t border-slate-900 text-center text-xs text-slate-600">
+        <p>
+          AceStream Manager <span class="text-slate-500">v<%= appVersion %></span>
+          &nbsp;·&nbsp;
+          <a href="https://github.com/gabo-it/Acestream-Manager" target="_blank" rel="noopener" class="hover:text-indigo-400 transition">GitHub</a>
+        </p>
+      </footer>
     </div>
-  </nav>
-  <main class="max-w-6xl mx-auto px-4 py-8">
+  </div>
+
+  <script>
+    (function () {
+      // Evidenzia la voce della sidebar corrispondente alla pagina corrente.
+      // Il link Dashboard ("/") usa match esatto (data-nav-exact) — altrimenti,
+      // dato che ogni percorso inizia per "/", risulterebbe sempre "attivo".
+      var path = window.location.pathname;
+      document.querySelectorAll('[data-nav]').forEach(function (link) {
+        var href = link.getAttribute('href');
+        var exact = link.hasAttribute('data-nav-exact');
+        var isActive = exact ? path === href : (path === href || path.startsWith(href + '/'));
+        if (isActive) link.classList.add('active');
+      });
+
+      // Toggle sidebar su mobile/tablet.
+      var sidebar = document.getElementById('sidebar');
+      var overlay = document.getElementById('sidebar-overlay');
+      var toggleBtn = document.getElementById('sidebar-toggle');
+      function openSidebar() {
+        sidebar.classList.remove('-translate-x-full');
+        overlay.classList.remove('hidden');
+      }
+      function closeSidebar() {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+      }
+      if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+      if (overlay) overlay.addEventListener('click', closeSidebar);
+    })();
+  </script>
+<% } else { %>
+  <main class="px-2 py-2">
     <% if (typeof flash !== 'undefined' && flash) { %>
       <div class="mb-6 rounded-lg border border-indigo-800 bg-indigo-950/50 text-indigo-200 px-4 py-3 text-sm">
         <%= flash %>
@@ -47,12 +136,6 @@
     <% } %>
     <%- body %>
   </main>
-  <footer class="max-w-6xl mx-auto px-4 py-8 mt-8 border-t border-slate-900 text-center text-xs text-slate-600">
-    <p>
-      AceStream Manager <span class="text-slate-500">v<%= appVersion %></span>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/gabo-it/Acestream-Manager" target="_blank" rel="noopener" class="hover:text-indigo-400 transition">GitHub</a>
-    </p>
-  </footer>
+<% } %>
 </body>
 </html>

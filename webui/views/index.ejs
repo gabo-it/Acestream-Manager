@@ -1,17 +1,20 @@
-<div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
-  <h1 class="text-2xl font-bold"><%= t('channels.title') %> <span class="text-slate-500 text-base font-normal">(<%= channels.length %>)</span></h1>
+<div class="flex items-center justify-between mb-8 gap-4 flex-wrap">
+  <h1 class="text-3xl font-bold tracking-tight">
+    <%= t('channels.title') %>
+    <span class="text-slate-500 text-lg font-normal ml-1">(<%= channels.length %>)</span>
+  </h1>
   <div class="flex items-center gap-2">
-    <form method="GET" action="/" class="flex">
+    <form method="GET" action="/channels" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
       <input type="text" name="q" value="<%= q || '' %>" placeholder="<%= t('channels.search_placeholder') %>"
-             class="rounded-l-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 w-56" />
-      <button class="rounded-r-lg bg-slate-800 hover:bg-slate-700 transition px-3 text-sm"><%= t('channels.search_btn') %></button>
+             class="bg-transparent px-3.5 py-2.5 text-sm focus:outline-none w-56 placeholder:text-slate-600" />
+      <button class="px-3.5 py-2.5 text-slate-500 hover:text-indigo-400 transition"><%= t('channels.search_btn') %></button>
     </form>
     <form method="POST" action="/channels/check-all">
-      <button class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+      <button class="rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-900 transition px-4 py-2.5 text-sm font-medium text-slate-300">
         <%= t('channels.check_all') %>
       </button>
     </form>
-    <a href="/channels/new" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+    <a href="/channels/new" class="rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-400 hover:to-indigo-600 transition shadow-lg shadow-indigo-950/50 px-4 py-2.5 text-sm font-semibold">
       <%= t('channels.new') %>
     </a>
   </div>
@@ -42,65 +45,74 @@
       <% channels.forEach(function(ch) { %>
         <% const acexy = (acexyBaseUrl || '').replace(/\/$/, ''); %>
         <% const streamUrl = `${acexy}/ace/getstream?id=${ch.acestream_id}`; %>
-        <div class="rounded-xl border border-slate-800 bg-slate-800/60">
+        <% const statusStyle = ch.status === 'online'
+             ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
+             : ch.status === 'offline'
+             ? 'bg-red-950/60 text-red-400 border-red-900/60'
+             : 'bg-slate-800/60 text-slate-500 border-slate-700/60'; %>
+        <div class="group rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-950/40 transition-all">
           <div class="p-4 flex items-center gap-4">
             <input type="checkbox" name="ids" value="<%= ch.id %>" class="channel-checkbox rounded bg-slate-950 border-slate-700 flex-shrink-0" />
             <img src="<%= ch.logo_url || 'https://placehold.co/64x64/1e293b/94a3b8?text=%20' %>"
-                 class="w-12 h-12 rounded-lg object-cover bg-slate-800 flex-shrink-0" alt="" />
+                 class="w-12 h-12 rounded-xl object-cover bg-slate-800 ring-1 ring-slate-700/60 flex-shrink-0" alt="" />
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full flex-shrink-0 <%=
-                  ch.status === 'online' ? 'bg-emerald-500' : ch.status === 'offline' ? 'bg-red-500' : 'bg-slate-600'
-                %>" title="<%= ch.status %>"></span>
-                <button type="button" class="font-medium truncate hover:text-indigo-400 transition text-left"
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[10px] font-medium uppercase tracking-wide rounded-md border px-1.5 py-0.5 flex-shrink-0 <%= statusStyle %>"><%= ch.status || '—' %></span>
+                <button type="button" class="font-semibold truncate group-hover:text-indigo-300 transition text-left"
                         onclick="toggleSchedule(<%= ch.id %>, '<%= ch.tvg_id %>')">
                   <%= ch.name %>
                 </button>
                 <% if (ch.category) { %>
-                  <span class="text-xs rounded-full bg-slate-800 px-2 py-0.5 text-slate-400"><%= ch.category %></span>
+                  <span class="text-xs rounded-full bg-slate-800/80 px-2 py-0.5 text-slate-400"><%= ch.category %></span>
                 <% } %>
                 <% if (ch.tvg_id && tvgIdCounts[ch.tvg_id] > 1) { %>
-                  <span class="text-xs rounded-full bg-indigo-950 text-indigo-300 px-2 py-0.5" title="<%= t('channels.duplicate_hint') %>">
+                  <span class="text-xs rounded-full bg-indigo-950/80 text-indigo-300 px-2 py-0.5" title="<%= t('channels.duplicate_hint') %>">
                     <%= tvgIdCounts[ch.tvg_id] %> <%= t('channels.streams_count') %>
                   </span>
                 <% } %>
               </div>
-              <div class="text-xs text-slate-500 truncate"><%= t('channels.id_label') %>: <%= ch.acestream_id %></div>
+              <div class="text-xs text-slate-600 truncate mt-0.5"><%= t('channels.id_label') %>: <%= ch.acestream_id %></div>
               <% const nn = epgByChannel[ch.id]; %>
               <% if (nn && nn.now) { %>
-                <div class="mt-1 text-sm text-indigo-300 truncate"><%= t('channels.now_playing') %>: <%= nn.now.title %></div>
+                <div class="mt-1.5 flex items-center gap-1.5 text-sm text-indigo-300 truncate">
+                  <span class="relative flex h-1.5 w-1.5 flex-shrink-0">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-400"></span>
+                  </span>
+                  <%= nn.now.title %>
+                </div>
               <% } %>
               <% if (nn && nn.next) { %>
                 <div class="text-xs text-slate-500 truncate"><%= t('channels.up_next') %>: <%= nn.next.title %></div>
               <% } %>
-              <div class="flex items-center gap-3 mt-2 text-xs">
-                <a href="/watch/<%= ch.id %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
-                <a href="/channels/<%= ch.id %>/vlc.m3u" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
-                <a href="acestream://<%= ch.acestream_id %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.aceplayer') %></a>
-                <button type="button" onclick="copyLink('<%= streamUrl %>', this)" class="text-slate-400 hover:text-indigo-400 transition">
+              <div class="flex items-center gap-3 mt-2.5 text-xs">
+                <a href="/watch/<%= ch.id %>" class="text-slate-500 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
+                <a href="/channels/<%= ch.id %>/vlc.m3u" class="text-slate-500 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
+                <a href="acestream://<%= ch.acestream_id %>" class="text-slate-500 hover:text-indigo-400 transition"><%= t('channels.aceplayer') %></a>
+                <button type="button" onclick="copyLink('<%= streamUrl %>', this)" class="text-slate-500 hover:text-indigo-400 transition">
                   <%= t('channels.copy_link') %>
                 </button>
               </div>
             </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
+            <div class="flex items-center gap-1.5 flex-shrink-0">
               <button type="submit" formaction="/channels/<%= ch.id %>/check-status" formmethod="POST"
-                      class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                      class="text-sm text-slate-400 hover:text-indigo-300 hover:border-indigo-500/40 transition px-3 py-1.5 rounded-lg border border-slate-800">
                 <%= t('channels.verify') %>
               </button>
               <button type="button" onclick="toggleTvgSuggest(<%= ch.id %>)"
-                      class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                      class="text-sm text-slate-400 hover:text-indigo-300 hover:border-indigo-500/40 transition px-3 py-1.5 rounded-lg border border-slate-800">
                 <%= t('channels.tvg_suggest') %>
               </button>
-              <a href="/channels/new?duplicate_from=<%= ch.id %>" class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+              <a href="/channels/new?duplicate_from=<%= ch.id %>" class="text-sm text-slate-400 hover:text-indigo-300 hover:border-indigo-500/40 transition px-3 py-1.5 rounded-lg border border-slate-800">
                 <%= t('channels.add_alt_stream') %>
               </a>
-              <a href="/channels/<%= ch.id %>/edit" class="text-sm text-slate-400 hover:text-indigo-400 transition px-3 py-1.5 rounded-lg border border-slate-800">
+              <a href="/channels/<%= ch.id %>/edit" class="text-sm text-slate-400 hover:text-indigo-300 hover:border-indigo-500/40 transition px-3 py-1.5 rounded-lg border border-slate-800">
                 <%= t('channels.edit') %>
               </a>
             </div>
           </div>
-          <div id="schedule-<%= ch.id %>" class="hidden border-t border-slate-800 px-4 py-3 text-sm"></div>
-          <div id="tvgsuggest-<%= ch.id %>" class="hidden border-t border-slate-800 px-4 py-3 text-sm"></div>
+          <div id="schedule-<%= ch.id %>" class="hidden border-t border-slate-800/80 px-4 py-3 text-sm"></div>
+          <div id="tvgsuggest-<%= ch.id %>" class="hidden border-t border-slate-800/80 px-4 py-3 text-sm"></div>
         </div>
       <% }); %>
     </div>
@@ -145,15 +157,29 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  // Mezzanotte LOCALE (non UTC) per una data data — il costruttore Date
+  // con argomenti separati (anno, mese, giorno) usa sempre il fuso
+  // orario del browser, che è esattamente quello che vogliamo: senza
+  // questo, un utente in un fuso avanti rispetto a UTC (es. Italia)
+  // nelle prime ore del mattino locale vedrebbe ancora la programmazione
+  // del giorno UTC precedente, con tutti i programmi già "passati".
+  function localMidnight(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  }
+
+  function formatDayLabel(ts) {
+    return new Date(ts).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
   function renderSchedule(panel, channelId, data) {
     if (!data.tvgId) {
       panel.innerHTML = '<p class="text-slate-500">' + i18n.noTvgId + '</p>';
       return;
     }
     var html = '<div class="flex items-center justify-between mb-3">';
-    html += '<button type="button" class="text-indigo-400 hover:text-indigo-300 text-xs" onclick="loadSchedule(' + channelId + ', \'' + data.prevDate + '\')">' + i18n.prevDay + '</button>';
-    html += '<span class="text-slate-300 font-medium">' + data.date + '</span>';
-    html += '<button type="button" class="text-indigo-400 hover:text-indigo-300 text-xs" onclick="loadSchedule(' + channelId + ', \'' + data.nextDate + '\')">' + i18n.nextDay + '</button>';
+    html += '<button type="button" class="text-indigo-400 hover:text-indigo-300 text-xs" onclick="loadSchedule(' + channelId + ', ' + data.prevTs + ')">' + i18n.prevDay + '</button>';
+    html += '<span class="text-slate-300 font-medium">' + formatDayLabel(data.ts) + '</span>';
+    html += '<button type="button" class="text-indigo-400 hover:text-indigo-300 text-xs" onclick="loadSchedule(' + channelId + ', ' + data.nextTs + ')">' + i18n.nextDay + '</button>';
     html += '</div>';
 
     if (!data.programs.length) {
@@ -171,10 +197,10 @@
     panel.innerHTML = html;
   }
 
-  function loadSchedule(channelId, date) {
+  function loadSchedule(channelId, ts) {
     var panel = document.getElementById('schedule-' + channelId);
     panel.innerHTML = '<p class="text-slate-500">' + i18n.loading + '</p>';
-    fetch('/channels/' + channelId + '/schedule?date=' + date)
+    fetch('/channels/' + channelId + '/schedule?ts=' + ts)
       .then(function (r) { return r.json(); })
       .then(function (data) { renderSchedule(panel, channelId, data); })
       .catch(function () { panel.innerHTML = '<p class="text-red-400">' + i18n.error + '</p>'; });
@@ -188,7 +214,7 @@
       panel.classList.remove('hidden');
       if (!panel.dataset.loaded) {
         panel.dataset.loaded = '1';
-        loadSchedule(channelId, new Date().toISOString().slice(0, 10));
+        loadSchedule(channelId, localMidnight(new Date()));
       }
     }
   }

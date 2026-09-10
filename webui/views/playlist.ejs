@@ -6,22 +6,33 @@
   <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
     <h2 class="font-semibold mb-1"><%= t('playlist.ts_title') %></h2>
     <p class="text-xs text-slate-500 mb-4"><%= t('playlist.ts_desc') %></p>
-    <div class="flex gap-2">
-      <input readonly value="<%= tsUrl %>"
-             class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono text-slate-300" />
-      <button type="button" onclick="copyPlaylistLink('<%= tsUrl %>', this)"
-              class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm flex-shrink-0">
-        <%= t('channels.copy_link') %>
-      </button>
-      <a href="<%= tsUrl %>" target="_blank" rel="noopener"
-         class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium flex-shrink-0">
-        <%= t('playlist.open') %>
-      </a>
+    <div class="flex gap-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex gap-2">
+          <input readonly value="<%= tsUrl %>"
+                 class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono text-slate-300" />
+          <button type="button" onclick="copyPlaylistLink('<%= tsUrl %>', this)"
+                  class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm flex-shrink-0">
+            <%= t('channels.copy_link') %>
+          </button>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <a href="<%= tsUrl %>" target="_blank" rel="noopener"
+             class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+            <%= t('playlist.open') %>
+          </a>
+          <a href="<%= tsUrl %>" download="playlist.m3u8"
+             class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+            <%= t('playlist.download') %>
+          </a>
+        </div>
+        <p class="text-xs text-slate-500 mt-2">
+          <%= t('playlist.via') %>: <code class="text-slate-400"><%= acexyBaseUrl %></code>
+          (<a href="/settings" class="text-indigo-400 underline"><%= t('nav.settings') %></a>)
+        </p>
+      </div>
+      <img src="<%= tsQr %>" alt="QR" class="w-24 h-24 rounded-lg bg-white p-1.5 flex-shrink-0" title="<%= t('playlist.qr_hint') %>" />
     </div>
-    <p class="text-xs text-slate-500 mt-2">
-      <%= t('playlist.via') %>: <code class="text-slate-400"><%= acexyBaseUrl %></code>
-      (<a href="/settings" class="text-indigo-400 underline"><%= t('nav.settings') %></a>)
-    </p>
   </div>
 
   <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
@@ -34,25 +45,171 @@
         <a href="/settings" class="underline"><%= t('nav.settings') %></a>.
       </div>
     <% } else { %>
-      <div class="flex gap-2">
-        <input readonly value="<%= hlsUrl %>"
-               class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono text-slate-300" />
-        <button type="button" onclick="copyPlaylistLink('<%= hlsUrl %>', this)"
-                class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm flex-shrink-0">
-          <%= t('channels.copy_link') %>
-        </button>
-        <a href="<%= hlsUrl %>" target="_blank" rel="noopener"
-           class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium flex-shrink-0">
-          <%= t('playlist.open') %>
-        </a>
+      <div class="flex gap-4">
+        <div class="flex-1 min-w-0">
+          <div class="flex gap-2">
+            <input readonly value="<%= hlsUrl %>"
+                   class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono text-slate-300" />
+            <button type="button" onclick="copyPlaylistLink('<%= hlsUrl %>', this)"
+                    class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm flex-shrink-0">
+              <%= t('channels.copy_link') %>
+            </button>
+          </div>
+          <div class="flex gap-2 mt-2">
+            <a href="<%= hlsUrl %>" target="_blank" rel="noopener"
+               class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+              <%= t('playlist.open') %>
+            </a>
+            <a href="<%= hlsUrl %>" download="playlist-hls.m3u8"
+               class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+              <%= t('playlist.download') %>
+            </a>
+          </div>
+          <p class="text-xs text-slate-500 mt-2">
+            <%= t('playlist.via') %>: <code class="text-slate-400"><%= enginePublicUrl %></code>
+            (<a href="/settings" class="text-indigo-400 underline"><%= t('nav.settings') %></a>)
+          </p>
+        </div>
+        <img src="<%= hlsQr %>" alt="QR" class="w-24 h-24 rounded-lg bg-white p-1.5 flex-shrink-0" title="<%= t('playlist.qr_hint') %>" />
       </div>
-      <p class="text-xs text-slate-500 mt-2">
-        <%= t('playlist.via') %>: <code class="text-slate-400"><%= enginePublicUrl %></code>
-        (<a href="/settings" class="text-indigo-400 underline"><%= t('nav.settings') %></a>)
-      </p>
     <% } %>
     <p class="text-xs text-amber-400 mt-3"><%= t('playlist.hls_experimental') %></p>
   </div>
+
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+    <h2 class="font-semibold mb-1"><%= t('playlist.epg_xml_title') %></h2>
+    <p class="text-xs text-slate-500 mb-4"><%= t('playlist.epg_xml_desc') %></p>
+    <div class="flex gap-2">
+      <input readonly value="<%= epgXmlUrl %>"
+             class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono text-slate-300" />
+      <button type="button" onclick="copyPlaylistLink('<%= epgXmlUrl %>', this)"
+              class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm flex-shrink-0">
+        <%= t('channels.copy_link') %>
+      </button>
+      <a href="<%= epgXmlUrl %>" target="_blank" rel="noopener"
+         class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium flex-shrink-0">
+        <%= t('playlist.open') %>
+      </a>
+    </div>
+  </div>
+
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-6">
+    <h2 class="font-semibold mb-1"><%= t('playlist.epg_sources_title') %></h2>
+    <p class="text-xs text-slate-500 mb-4"><%= t('playlist.epg_sources_help') %></p>
+
+    <% if (epgUrls.length === 0) { %>
+      <p class="text-sm text-slate-500 mb-3"><%= t('playlist.epg_no_sources') %></p>
+    <% } else { %>
+      <div class="grid gap-2 mb-3">
+        <% epgUrls.forEach(function(item) { %>
+          <div class="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2.5">
+            <div class="min-w-0 flex-1">
+              <div class="font-mono text-xs truncate text-slate-300"><%= item.url %></div>
+              <div class="text-xs mt-0.5">
+                <% if (!item.stats) { %>
+                  <span class="text-slate-600"><%= t('playlist.epg_never_fetched') %></span>
+                <% } else if (item.stats.last_error) { %>
+                  <span class="text-red-400"><%= item.stats.last_error %></span>
+                <% } else { %>
+                  <span class="text-slate-500">
+                    <%= item.stats.program_count %> <%= t('playlist.epg_programs') %> ·
+                    <%= t('playlist.epg_last_fetch') %>: <%= new Date(item.stats.last_fetch_at).toLocaleString('en-US') %>
+                  </span>
+                <% } %>
+              </div>
+            </div>
+            <form method="POST" action="/playlist/epg/remove-url" class="flex-shrink-0">
+              <input type="hidden" name="url" value="<%= item.url %>" />
+              <button class="text-xs text-red-400 hover:text-red-300 transition px-2.5 py-1.5 rounded-lg border border-slate-800" title="<%= t('playlist.epg_remove') %>">✕</button>
+            </form>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <form method="POST" action="/playlist/epg/add-url" class="flex gap-2">
+      <input type="url" name="url" required placeholder="https://example.com/epg.xml"
+             class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500" />
+      <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium flex-shrink-0" title="<%= t('playlist.epg_add') %>">
+        +
+      </button>
+    </form>
+  </div>
+
+  <form method="POST" action="/sources/epg" class="rounded-xl border border-slate-800 bg-slate-800/60 p-6 grid gap-6">
+    <h2 class="font-semibold -mb-2"><%= t('playlist.epg_settings_title') %></h2>
+
+    <div>
+      <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_interval_label') %></label>
+      <input type="number" name="epg_refresh_hours" min="1" max="24" value="<%= epgRefreshHours %>"
+             class="w-32 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" />
+      <p class="text-xs text-slate-500 mt-1"><%= t('settings.epg_interval_help') %></p>
+      <% if (epgLastResult) { %>
+        <% const epgFailed = /fallit|errore|error|failed/i.test(epgLastResult); %>
+        <p class="text-xs mt-2 rounded-lg border <%= epgFailed ? 'border-red-900 bg-red-950/40 text-red-300' : 'border-slate-800 bg-slate-950 text-slate-400' %> px-3 py-2">
+          <span class="<%= epgFailed ? 'text-red-200' : 'text-slate-300' %>"><%= t('settings.epg_last_update') %></span> <%= epgLastResult %>
+        </p>
+      <% } %>
+    </div>
+
+    <div class="rounded-xl border border-slate-700 bg-slate-900/60 p-4 grid gap-4">
+      <h3 class="font-semibold text-slate-200"><%= t('sources.epg_translation_title') %></h3>
+
+      <div>
+        <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_language_label') %></label>
+        <select name="epg_language" class="w-56 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500">
+          <option value="" <%= !epgLanguage ? 'selected' : '' %>><%= t('settings.epg_language_original') %></option>
+          <option value="it" <%= epgLanguage === 'it' ? 'selected' : '' %>>Italiano</option>
+          <option value="en" <%= epgLanguage === 'en' ? 'selected' : '' %>>English</option>
+          <option value="fr" <%= epgLanguage === 'fr' ? 'selected' : '' %>>Français</option>
+          <option value="es" <%= epgLanguage === 'es' ? 'selected' : '' %>>Español</option>
+        </select>
+        <p class="text-xs text-amber-400 mt-1"><%= t('settings.epg_language_help') %></p>
+      </div>
+
+      <div>
+        <label class="block text-sm text-slate-400 mb-1"><%= t('settings.libretranslate_url_label') %></label>
+        <input type="url" name="libretranslate_url" value="<%= libretranslateUrl || '' %>" placeholder="http://192.168.1.50:5000"
+               class="w-80 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500" />
+        <p class="text-xs text-slate-500 mt-1"><%= t('settings.libretranslate_url_help') %></p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="epg_translate_ui" <%= epgTranslateUi ? 'checked' : '' %>
+                 class="mt-1 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" />
+          <span>
+            <span class="text-slate-300"><%= t('settings.epg_translate_ui_label') %></span><br/>
+            <span class="text-xs text-slate-500"><%= t('settings.epg_translate_ui_help') %></span>
+          </span>
+        </label>
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="epg_translate_xml" <%= epgTranslateXml ? 'checked' : '' %>
+                 class="mt-1 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" />
+          <span>
+            <span class="text-slate-300"><%= t('settings.epg_translate_xml_label') %></span><br/>
+            <span class="text-xs text-amber-400"><%= t('settings.epg_translate_xml_help') %></span>
+          </span>
+        </label>
+
+        <div class="ml-6">
+          <label class="block text-sm text-slate-400 mb-1"><%= t('settings.epg_translate_days_label') %></label>
+          <input type="number" name="epg_translate_days" value="<%= epgTranslateDays || '2' %>" min="1" max="14"
+                 class="w-24 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500" />
+          <p class="text-xs text-amber-400 mt-1"><%= t('settings.epg_translate_days_help') %></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+        <%= t('settings.save') %>
+      </button>
+      <button formaction="/sources/epg/refresh" class="rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm">
+        <%= t('settings.refresh_epg') %>
+      </button>
+    </div>
+  </form>
 
 </div>
 

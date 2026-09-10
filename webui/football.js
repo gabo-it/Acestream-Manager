@@ -84,13 +84,13 @@ async function buildTeamIndex() {
         }
       }
     } catch (err) {
-      console.error(`[football] indicizzazione fallita per ${country}/${slug}:`, err.message);
+      console.error(`[football] indexing failed for ${country}/${slug}:`, err.message);
     }
   }
 
   teamIndex = results;
   teamIndexBuiltAt = Date.now();
-  console.log(`[football] indice squadre costruito: ${teamIndex.length} squadre da ${COMPETITIONS.length} campionati`);
+  console.log(`[football] team index built: ${teamIndex.length} teams from ${COMPETITIONS.length} competitions`);
   return teamIndex;
 }
 

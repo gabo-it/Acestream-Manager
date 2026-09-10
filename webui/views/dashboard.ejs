@@ -1,0 +1,149 @@
+<% var hour = new Date().getHours(); %>
+<% var greetingKey = hour < 6 ? 'dashboard.greeting_night' : hour < 12 ? 'dashboard.greeting_morning' : hour < 18 ? 'dashboard.greeting_afternoon' : 'dashboard.greeting_evening'; %>
+
+<!-- Hero -->
+<div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-900/40 p-6 sm:p-8 mb-8">
+  <div class="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-indigo-600/10 blur-3xl"></div>
+  <div class="absolute -bottom-20 -left-10 w-56 h-56 rounded-full bg-purple-600/10 blur-3xl"></div>
+  <div class="relative">
+    <p class="text-indigo-300 text-sm font-medium mb-1"><%= t(greetingKey) %></p>
+    <h1 class="text-3xl sm:text-4xl font-bold tracking-tight mb-2"><%= t('dashboard.title') %></h1>
+    <p class="text-slate-400 text-sm max-w-lg">
+      <%= t('dashboard.hero_subtitle').replace('{count}', channelCount) %>
+    </p>
+    <a href="/tv" class="inline-flex items-center gap-2 mt-4 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-400 hover:to-indigo-600 transition shadow-lg shadow-indigo-950/50 px-5 py-2.5 text-sm font-semibold">
+      📺 <%= t('dashboard.hero_cta') %>
+    </a>
+  </div>
+</div>
+
+<!-- Statistiche rapide -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+  <a href="/channels" class="group rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-950/40 transition-all p-4">
+    <span class="flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-500/10 text-lg mb-2">🗂️</span>
+    <span class="block text-2xl font-bold group-hover:text-indigo-300 transition"><%= channelCount %></span>
+    <span class="block text-xs text-slate-500 mt-0.5"><%= t('dashboard.channels') %></span>
+  </a>
+  <a href="/playlist" class="group rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-950/40 transition-all p-4">
+    <span class="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 text-lg mb-2">📡</span>
+    <span class="block text-2xl font-bold group-hover:text-indigo-300 transition"><%= epgSourceCount %></span>
+    <span class="block text-xs text-slate-500 mt-0.5"><%= t('dashboard.sources') %></span>
+  </a>
+  <a href="/addons" class="group rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-950/40 transition-all p-4">
+    <span class="flex items-center justify-center w-9 h-9 rounded-lg bg-purple-500/10 text-lg mb-2">🔌</span>
+    <span class="block text-2xl font-bold group-hover:text-indigo-300 transition"><%= vlcDeviceCount %></span>
+    <span class="block text-xs text-slate-500 mt-0.5"><%= t('dashboard.vlc_devices') %></span>
+  </a>
+  <a href="/playlist" class="group rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-950/40 transition-all p-4">
+    <span class="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/10 text-lg mb-2">🌐</span>
+    <span class="block text-2xl font-bold group-hover:text-indigo-300 transition"><%= libretranslateConfigured ? '✓' : '—' %></span>
+    <span class="block text-xs text-slate-500 mt-0.5"><%= t('dashboard.translation') %></span>
+  </a>
+</div>
+
+<!-- Inventory -->
+<div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-4 mb-6">
+  <h2 class="font-semibold mb-3 text-sm"><%= t('dashboard.inventory_title') %></h2>
+  <div class="grid sm:grid-cols-3 gap-4">
+    <div>
+      <h3 class="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5"><%= t('dashboard.inv_streams') %></h3>
+      <div class="grid gap-1 text-xs">
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_total') %></span><span class="font-semibold"><%= inventory.streamsTotal %></span></div>
+        <div class="flex justify-between gap-3"><a href="/channels" class="text-indigo-400 hover:underline"><%= t('dashboard.inv_online') %></a><span class="font-semibold text-emerald-400"><%= inventory.streamsOnline %></span></div>
+        <div class="flex justify-between gap-3"><a href="/channels" class="text-indigo-400 hover:underline"><%= t('dashboard.inv_offline') %></a><span class="font-semibold text-red-400"><%= inventory.streamsOffline %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_not_checked') %></span><span class="font-semibold text-slate-500"><%= inventory.streamsNotChecked %></span></div>
+      </div>
+    </div>
+    <div>
+      <h3 class="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5"><%= t('dashboard.inv_tv_channels') %></h3>
+      <div class="grid gap-1 text-xs">
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_total') %></span><span class="font-semibold"><%= inventory.tvTotal %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_active') %></span><span class="font-semibold"><%= inventory.tvActive %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_with_epg') %></span><span class="font-semibold"><%= inventory.tvWithEpg %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_linked') %></span><span class="font-semibold"><%= inventory.tvLinked %></span></div>
+      </div>
+    </div>
+    <div>
+      <h3 class="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5"><%= t('dashboard.inv_sources_guide') %></h3>
+      <div class="grid gap-1 text-xs">
+        <div class="flex justify-between gap-3">
+          <a href="/sources" class="text-indigo-400 hover:underline flex-shrink-0"><%= t('dashboard.inv_source_urls') %></a>
+          <span class="font-semibold text-right">
+            <%= inventory.sourceUrlsTotal %> (<%= inventory.sourceUrlsEnabled %> <%= t('dashboard.inv_enabled') %><% if (inventory.sourceUrlsFailing > 0) { %>, <span class="text-red-400"><%= inventory.sourceUrlsFailing %> <%= t('dashboard.inv_failing') %></span><% } %>)
+          </span>
+        </div>
+        <div class="flex justify-between gap-3"><a href="/playlist" class="text-indigo-400 hover:underline"><%= t('dashboard.inv_epg_sources') %></a><span class="font-semibold"><%= inventory.epgSourceCount %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_guide_channels') %></span><span class="font-semibold"><%= inventory.guideChannels %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_programmes') %></span><span class="font-semibold"><%= inventory.programmes %></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- In arrivo a breve -->
+<% if (comingUpNext.length > 0) { %>
+  <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
+    <h2 class="font-semibold mb-3">⏱️ <%= t('dashboard.coming_up_next') %></h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <% comingUpNext.forEach(function(ch) { %>
+        <a href="/tv?q=<%= encodeURIComponent(ch.name) %>" class="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5">
+          <% if (ch.logoUrl) { %>
+            <img src="<%= ch.logoUrl %>" alt="" class="w-8 h-8 rounded-lg object-contain bg-slate-900 ring-1 ring-slate-700/60 flex-shrink-0" onerror="this.style.display='none'" />
+          <% } %>
+          <span class="min-w-0">
+            <span class="block text-sm font-medium truncate"><%= ch.name %></span>
+            <span class="block text-xs text-slate-500 truncate">
+              <%= new Date(ch.next.start_ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) %> · <%= ch.next.title %>
+            </span>
+          </span>
+        </a>
+      <% }); %>
+    </div>
+  </div>
+<% } %>
+
+<!-- Aggiunti di recente -->
+<% if (recentChannels.length > 0) { %>
+  <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
+    <h2 class="font-semibold mb-3">🆕 <%= t('dashboard.recently_added') %></h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <% recentChannels.forEach(function(ch) { %>
+        <a href="/watch/<%= ch.id %>" class="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5">
+          <% if (ch.logo_url) { %>
+            <img src="<%= ch.logo_url %>" alt="" class="w-8 h-8 rounded-lg object-contain bg-slate-900 ring-1 ring-slate-700/60 flex-shrink-0" onerror="this.style.display='none'" />
+          <% } else { %>
+            <span class="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-700/60 flex-shrink-0 flex items-center justify-center text-xs">📺</span>
+          <% } %>
+          <span class="block text-sm font-medium truncate"><%= ch.name %></span>
+        </a>
+      <% }); %>
+    </div>
+  </div>
+<% } %>
+
+<!-- Stato EPG -->
+<% if (epgLastResult) { %>
+  <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
+    <h2 class="font-semibold mb-2">📅 <%= t('dashboard.epg_status') %></h2>
+    <p class="text-sm text-slate-400"><%= epgLastResult %></p>
+  </div>
+<% } %>
+
+<!-- Log errori/warning recenti -->
+<div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5">
+  <h2 class="font-semibold mb-1">⚠️ <%= t('dashboard.issues_title') %></h2>
+  <p class="text-xs text-slate-500 mb-4"><%= t('dashboard.issues_subtitle') %></p>
+  <% if (recentIssues.length === 0) { %>
+    <p class="text-sm text-emerald-400">✓ <%= t('dashboard.issues_none') %></p>
+  <% } else { %>
+    <div class="grid gap-1.5 max-h-64 overflow-y-auto">
+      <% recentIssues.forEach(function(issue) { %>
+        <div class="flex items-start gap-2 text-xs rounded-lg bg-slate-950/60 px-3 py-2">
+          <span class="flex-shrink-0 rounded px-1.5 py-0.5 font-semibold uppercase text-[10px] <%= issue.level === 'error' ? 'bg-red-950 text-red-400' : 'bg-amber-950 text-amber-400' %>"><%= issue.level %></span>
+          <span class="text-slate-400 flex-1 min-w-0 break-words"><%= issue.message %></span>
+          <span class="text-slate-600 flex-shrink-0"><%= new Date(issue.at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) %></span>
+        </div>
+      <% }); %>
+    </div>
+  <% } %>
+</div>

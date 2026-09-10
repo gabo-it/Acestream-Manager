@@ -1,0 +1,348 @@
+<h1 class="text-2xl font-bold mb-2"><%= t('addons.title') %></h1>
+<p class="text-sm text-slate-500 mb-6"><%= t('addons.subtitle') %></p>
+
+<div class="max-w-2xl rounded-xl border border-slate-800 bg-slate-800/60 p-6 mb-6">
+  <h2 class="font-semibold mb-1">📺 <%= t('addons.vlc_title') %></h2>
+  <p class="text-xs text-slate-500 mb-4"><%= t('addons.vlc_help') %></p>
+
+  <% if (devices.length === 0) { %>
+    <p class="text-sm text-slate-500 mb-4"><%= t('addons.vlc_no_devices') %></p>
+  <% } else { %>
+    <div class="grid gap-2 mb-4">
+      <% devices.forEach(function(d) { %>
+        <div class="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2">
+          <div>
+            <span class="text-sm font-medium"><%= d.name %></span>
+            <span class="text-xs text-slate-500 ml-2 font-mono"><%= d.host %>:<%= d.port %></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-500" data-vlc-status="<%= d.id %>">—</span>
+            <button type="button" data-vlc-test="<%= d.id %>"
+                    class="text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-2 py-1">
+              <%= t('addons.vlc_test') %>
+            </button>
+            <form method="POST" action="/addons/vlc/<%= d.id %>/delete" onsubmit="return confirm(<%- JSON.stringify(t('addons.vlc_delete_confirm')) %>);">
+              <button class="text-xs rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 transition px-2 py-1">
+                <%= t('addons.vlc_delete') %>
+              </button>
+            </form>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+  <% } %>
+
+  <div class="rounded-lg border border-slate-700 bg-slate-900/40 p-3 mb-4">
+    <p class="text-xs text-slate-400 mb-2"><%= t('addons.scan_intro') %></p>
+    <div class="flex gap-2 items-center">
+      <input type="text" id="vlc-scan-cidr" placeholder="192.168.1.0/24" class="w-40 rounded-lg bg-slate-950 border border-slate-800 px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-indigo-500" />
+      <input type="number" id="vlc-scan-port" value="8080" min="1" max="65535" class="w-20 rounded-lg bg-slate-950 border border-slate-800 px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-indigo-500" />
+      <button type="button" id="vlc-scan-btn" class="text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-3 py-1.5"><%= t('addons.scan_btn') %></button>
+    </div>
+    <div id="vlc-scan-results" class="mt-2 flex flex-wrap gap-2"></div>
+  </div>
+
+  <form method="POST" action="/addons/vlc" class="grid gap-3 pt-4 border-t border-slate-800">
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-slate-400 mb-1"><%= t('addons.vlc_name_label') %></label>
+        <input type="text" name="name" required placeholder="<%= t('addons.vlc_name_placeholder') %>"
+               class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1"><%= t('addons.vlc_host_label') %></label>
+        <input type="text" name="host" id="vlc-host-input" required placeholder="192.168.1.20"
+               class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500" />
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-slate-400 mb-1"><%= t('addons.vlc_port_label') %></label>
+        <input type="number" name="port" value="8080" min="1" max="65535"
+               class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1"><%= t('addons.vlc_password_label') %></label>
+        <input type="password" name="password" required
+               class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+      </div>
+    </div>
+    <p class="text-xs text-slate-500"><%= t('addons.vlc_setup_help') %></p>
+    <div>
+      <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+        <%= t('addons.vlc_add') %>
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="max-w-2xl rounded-xl border border-slate-800 bg-slate-800/60 p-6 mb-6">
+  <h2 class="font-semibold mb-1">🎬 <%= t('addons.jellyfin_title') %></h2>
+  <p class="text-xs text-slate-500 mb-4"><%= t('addons.jellyfin_help') %></p>
+
+  <div class="rounded-lg border border-slate-700 bg-slate-900/40 p-3 mb-4">
+    <p class="text-xs text-slate-400 mb-2"><%= t('addons.scan_intro') %></p>
+    <div class="flex gap-2 items-center">
+      <input type="text" id="jellyfin-scan-cidr" placeholder="192.168.1.0/24" class="w-40 rounded-lg bg-slate-950 border border-slate-800 px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-indigo-500" />
+      <input type="number" id="jellyfin-scan-port" value="8096" min="1" max="65535" class="w-20 rounded-lg bg-slate-950 border border-slate-800 px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-indigo-500" />
+      <button type="button" id="jellyfin-scan-btn" class="text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-3 py-1.5"><%= t('addons.scan_btn') %></button>
+    </div>
+    <div id="jellyfin-scan-results" class="mt-2 flex flex-wrap gap-2"></div>
+  </div>
+
+  <form method="POST" action="/addons/jellyfin" class="grid gap-3 mb-4">
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-slate-400 mb-1"><%= t('addons.jellyfin_server_label') %></label>
+        <input type="url" name="jellyfin_server_url" id="jellyfin-server-input" value="<%= jellyfinServerUrl %>" placeholder="http://192.168.1.50:8096"
+               class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1"><%= t('addons.jellyfin_apikey_label') %></label>
+        <input type="password" name="jellyfin_api_key" value="<%= jellyfinApiKey %>"
+               class="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+      </div>
+    </div>
+    <p class="text-xs text-slate-500"><%= t('addons.jellyfin_apikey_help') %></p>
+    <div class="flex items-center gap-2">
+      <button class="text-sm rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 flex-shrink-0">
+        <%= t('settings.save') %>
+      </button>
+      <button type="button" id="jellyfin-test-btn" class="text-sm rounded-lg border border-slate-700 hover:bg-slate-800 transition px-4 py-2 flex-shrink-0">
+        <%= t('addons.jellyfin_test') %>
+      </button>
+      <button type="button" id="jellyfin-refresh-btn" class="text-sm rounded-lg border border-slate-700 hover:bg-slate-800 transition px-4 py-2 flex-shrink-0">
+        <%= t('addons.jellyfin_refresh') %>
+      </button>
+      <span id="jellyfin-status" class="text-xs text-slate-500"></span>
+    </div>
+  </form>
+
+  <div class="pt-4 border-t border-slate-800">
+    <p class="text-xs text-slate-500 mb-2"><%= t('addons.jellyfin_tuner_intro') %></p>
+    <div class="grid gap-2">
+      <div class="flex gap-2 items-center">
+        <span class="text-xs text-slate-600 w-12 flex-shrink-0"><%= t('addons.jellyfin_m3u_label') %></span>
+        <input readonly value="<%= jellyfinTsUrl %>" class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-1.5 text-xs font-mono text-slate-400" />
+        <button type="button" onclick="copyAddonLink('<%= jellyfinTsUrl %>', this)" class="text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-2 py-1.5 flex-shrink-0">
+          <%= t('channels.copy_link') %>
+        </button>
+      </div>
+      <div class="flex gap-2 items-center">
+        <span class="text-xs text-slate-600 w-12 flex-shrink-0"><%= t('addons.jellyfin_epg_label') %></span>
+        <input readonly value="<%= jellyfinEpgUrl %>" class="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-1.5 text-xs font-mono text-slate-400" />
+        <button type="button" onclick="copyAddonLink('<%= jellyfinEpgUrl %>', this)" class="text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-2 py-1.5 flex-shrink-0">
+          <%= t('channels.copy_link') %>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="max-w-2xl rounded-xl border border-slate-800 bg-slate-800/60 p-6 mb-6">
+  <h2 class="font-semibold mb-1">☁️ <%= t('addons.warp_title') %></h2>
+  <p class="text-xs text-slate-500 mb-1"><%= t('addons.warp_help') %></p>
+  <p class="text-xs text-amber-400 mb-4"><%= t('addons.warp_permission_warning') %></p>
+  <div class="flex items-center gap-3">
+    <button type="button" id="warp-check-btn" class="text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-3 py-1.5">
+      <%= t('addons.warp_check') %>
+    </button>
+    <span id="warp-status" class="text-xs text-slate-500">—</span>
+  </div>
+</div>
+
+<div class="max-w-2xl rounded-xl border border-dashed border-slate-800 bg-slate-900/30 p-6 text-sm text-slate-500">
+  <%= t('addons.more_coming') %>
+</div>
+
+<script>
+  function copyAddonLink(url, btn) {
+    copyToClipboard(url).then(function () {
+      var original = btn.textContent;
+      btn.textContent = <%- JSON.stringify(t('channels.copied')) %>;
+      setTimeout(function () { btn.textContent = original; }, 1500);
+    }).catch(function (err) {
+      console.error('[copy] fallito:', err);
+      alert(url);
+    });
+  }
+
+  (function () {
+    var MSG_CHECKING = <%- JSON.stringify(t('addons.vlc_checking')) %>;
+    var MSG_JELLYFIN_CONNECTED = <%- JSON.stringify(t('addons.jellyfin_connected')) %>;
+    var MSG_JELLYFIN_FAILED = <%- JSON.stringify(t('addons.jellyfin_failed')) %>;
+    var MSG_JELLYFIN_NOT_CONFIGURED = <%- JSON.stringify(t('addons.jellyfin_not_configured')) %>;
+    var MSG_JELLYFIN_REFRESHING = <%- JSON.stringify(t('addons.jellyfin_refreshing')) %>;
+    var MSG_JELLYFIN_REFRESHED = <%- JSON.stringify(t('addons.jellyfin_refreshed')) %>;
+
+    var jfStatus = document.getElementById('jellyfin-status');
+
+    document.getElementById('jellyfin-test-btn').addEventListener('click', function () {
+      jfStatus.textContent = MSG_CHECKING;
+      jfStatus.className = 'text-xs text-slate-500';
+      fetch('/addons/jellyfin/test', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            jfStatus.textContent = '✓ ' + MSG_JELLYFIN_CONNECTED.replace('{name}', data.serverName).replace('{version}', data.version);
+            jfStatus.className = 'text-xs text-emerald-400';
+          } else if (data.error === 'not_configured') {
+            jfStatus.textContent = MSG_JELLYFIN_NOT_CONFIGURED;
+            jfStatus.className = 'text-xs text-amber-400';
+          } else {
+            jfStatus.textContent = '✗ ' + MSG_JELLYFIN_FAILED;
+            jfStatus.className = 'text-xs text-red-400';
+          }
+        })
+        .catch(function () {
+          jfStatus.textContent = '✗ ' + MSG_JELLYFIN_FAILED;
+          jfStatus.className = 'text-xs text-red-400';
+        });
+    });
+
+    document.getElementById('jellyfin-refresh-btn').addEventListener('click', function () {
+      jfStatus.textContent = MSG_JELLYFIN_REFRESHING;
+      jfStatus.className = 'text-xs text-slate-500';
+      fetch('/addons/jellyfin/refresh', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            jfStatus.textContent = '✓ ' + MSG_JELLYFIN_REFRESHED;
+            jfStatus.className = 'text-xs text-emerald-400';
+          } else if (data.error === 'not_configured') {
+            jfStatus.textContent = MSG_JELLYFIN_NOT_CONFIGURED;
+            jfStatus.className = 'text-xs text-amber-400';
+          } else {
+            jfStatus.textContent = '✗ ' + MSG_JELLYFIN_FAILED;
+            jfStatus.className = 'text-xs text-red-400';
+          }
+        })
+        .catch(function () {
+          jfStatus.textContent = '✗ ' + MSG_JELLYFIN_FAILED;
+          jfStatus.className = 'text-xs text-red-400';
+        });
+    });
+  })();
+
+  (function () {
+    var MSG_CHECKING = <%- JSON.stringify(t('addons.vlc_checking')) %>;
+    var MSG_OK = <%- JSON.stringify(t('addons.vlc_ok')) %>;
+    var MSG_FAILED = <%- JSON.stringify(t('addons.vlc_failed')) %>;
+    var MSG_WARP_CONNECTED = <%- JSON.stringify(t('addons.warp_connected')) %>;
+    var MSG_WARP_REACHABLE_NOT_CONNECTED = <%- JSON.stringify(t('addons.warp_reachable_not_connected')) %>;
+    var MSG_WARP_UNREACHABLE = <%- JSON.stringify(t('addons.warp_unreachable')) %>;
+
+    document.querySelectorAll('[data-vlc-test]').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var id = btn.getAttribute('data-vlc-test');
+        var statusEl = document.querySelector('[data-vlc-status="' + id + '"]');
+        statusEl.textContent = MSG_CHECKING;
+        statusEl.className = 'text-xs text-slate-500';
+        try {
+          var res = await fetch('/addons/vlc/' + id + '/test', { method: 'POST' });
+          var data = await res.json();
+          if (data.ok) {
+            statusEl.textContent = '✓ ' + MSG_OK;
+            statusEl.className = 'text-xs text-emerald-400';
+          } else {
+            statusEl.textContent = '✗ ' + MSG_FAILED;
+            statusEl.className = 'text-xs text-red-400';
+          }
+        } catch (e) {
+          statusEl.textContent = '✗ ' + MSG_FAILED;
+          statusEl.className = 'text-xs text-red-400';
+        }
+      });
+    });
+
+    var warpBtn = document.getElementById('warp-check-btn');
+    var warpStatus = document.getElementById('warp-status');
+    warpBtn.addEventListener('click', async function () {
+      warpStatus.textContent = MSG_CHECKING;
+      warpStatus.className = 'text-xs text-slate-500';
+      try {
+        var res = await fetch('/addons/warp/status');
+        var data = await res.json();
+        if (data.connected) {
+          warpStatus.textContent = '✓ ' + MSG_WARP_CONNECTED;
+          warpStatus.className = 'text-xs text-emerald-400';
+        } else if (data.reachable) {
+          warpStatus.textContent = '⚠ ' + MSG_WARP_REACHABLE_NOT_CONNECTED;
+          warpStatus.className = 'text-xs text-amber-400';
+        } else {
+          warpStatus.textContent = '✗ ' + MSG_WARP_UNREACHABLE;
+          warpStatus.className = 'text-xs text-red-400';
+        }
+      } catch (e) {
+        warpStatus.textContent = '✗ ' + MSG_WARP_UNREACHABLE;
+        warpStatus.className = 'text-xs text-red-400';
+      }
+    });
+  })();
+
+  (function () {
+    var MSG_SCANNING = <%- JSON.stringify(t('addons.scan_scanning')) %>;
+    var MSG_NONE_FOUND = <%- JSON.stringify(t('addons.scan_none_found')) %>;
+    var MSG_USE = <%- JSON.stringify(t('addons.scan_use')) %>;
+
+    document.getElementById('vlc-scan-btn').addEventListener('click', function () {
+      var cidr = document.getElementById('vlc-scan-cidr').value.trim();
+      var port = document.getElementById('vlc-scan-port').value;
+      var results = document.getElementById('vlc-scan-results');
+      if (!cidr) return;
+      results.innerHTML = '<span class="text-xs text-slate-500">' + MSG_SCANNING + '</span>';
+      fetch('/addons/scan/vlc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'cidr=' + encodeURIComponent(cidr) + '&port=' + encodeURIComponent(port),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.ok) { results.innerHTML = '<span class="text-xs text-red-400">' + data.error + '</span>'; return; }
+          if (data.candidates.length === 0) { results.innerHTML = '<span class="text-xs text-slate-500">' + MSG_NONE_FOUND + '</span>'; return; }
+          results.innerHTML = '';
+          data.candidates.forEach(function (c) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'text-xs rounded-lg border border-slate-700 hover:bg-indigo-600 hover:border-indigo-600 transition px-2 py-1 font-mono';
+            btn.textContent = c.ip + ' — ' + MSG_USE;
+            btn.addEventListener('click', function () {
+              document.getElementById('vlc-host-input').value = c.ip;
+            });
+            results.appendChild(btn);
+          });
+        })
+        .catch(function () { results.innerHTML = '<span class="text-xs text-red-400">' + MSG_NONE_FOUND + '</span>'; });
+    });
+
+    document.getElementById('jellyfin-scan-btn').addEventListener('click', function () {
+      var cidr = document.getElementById('jellyfin-scan-cidr').value.trim();
+      var port = document.getElementById('jellyfin-scan-port').value;
+      var results = document.getElementById('jellyfin-scan-results');
+      if (!cidr) return;
+      results.innerHTML = '<span class="text-xs text-slate-500">' + MSG_SCANNING + '</span>';
+      fetch('/addons/scan/jellyfin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'cidr=' + encodeURIComponent(cidr) + '&port=' + encodeURIComponent(port),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.ok) { results.innerHTML = '<span class="text-xs text-red-400">' + data.error + '</span>'; return; }
+          if (data.servers.length === 0) { results.innerHTML = '<span class="text-xs text-slate-500">' + MSG_NONE_FOUND + '</span>'; return; }
+          results.innerHTML = '';
+          data.servers.forEach(function (s) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'text-xs rounded-lg border border-slate-700 hover:bg-indigo-600 hover:border-indigo-600 transition px-2 py-1';
+            btn.textContent = s.serverName + ' (' + s.ip + ') — ' + MSG_USE;
+            btn.addEventListener('click', function () {
+              document.getElementById('jellyfin-server-input').value = 'http://' + s.ip + ':' + s.port;
+            });
+            results.appendChild(btn);
+          });
+        })
+        .catch(function () { results.innerHTML = '<span class="text-xs text-red-400">' + MSG_NONE_FOUND + '</span>'; });
+    });
+  })();
+</script>
