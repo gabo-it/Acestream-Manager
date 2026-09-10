@@ -166,9 +166,6 @@ app.get('/', (req, res) => {
     .get();
 
   const tvChannelTotal = db.prepare("SELECT COUNT(DISTINCT tvg_id) as c FROM channels WHERE tvg_id != ''").get().c;
-  const tvChannelActive = db
-    .prepare("SELECT COUNT(DISTINCT tvg_id) as c FROM channels WHERE tvg_id != '' AND status = 'online'")
-    .get().c;
   const tvChannelWithEpg = db
     .prepare(
       `SELECT COUNT(DISTINCT c.tvg_id) as c FROM channels c
@@ -198,7 +195,6 @@ app.get('/', (req, res) => {
     streamsOffline: streamStats.offline,
     streamsNotChecked: streamStats.notChecked,
     tvTotal: tvChannelTotal,
-    tvActive: tvChannelActive,
     tvWithEpg: tvChannelWithEpg,
     tvLinked: tvChannelLinked,
     sourceUrlsTotal: sourceRows.length,

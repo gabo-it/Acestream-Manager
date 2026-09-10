@@ -154,7 +154,7 @@
 
   function formatTime(ts) {
     var d = new Date(ts);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 
   // Mezzanotte LOCALE (non UTC) per una data data — il costruttore Date
@@ -168,7 +168,7 @@
   }
 
   function formatDayLabel(ts) {
-    return new Date(ts).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(ts).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   }
 
   function renderSchedule(panel, channelId, data) {

@@ -44,23 +44,18 @@
 <!-- Inventory -->
 <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-4 mb-6">
   <h2 class="font-semibold mb-3 text-sm"><%= t('dashboard.inventory_title') %></h2>
-  <div class="grid sm:grid-cols-3 gap-4">
+  <div class="grid sm:grid-cols-2 gap-4">
     <div>
-      <h3 class="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5"><%= t('dashboard.inv_streams') %></h3>
+      <h3 class="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5"><%= t('dashboard.inv_channels_streams') %></h3>
       <div class="grid gap-1 text-xs">
-        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_total') %></span><span class="font-semibold"><%= inventory.streamsTotal %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_tv_channels') %></span><span class="font-semibold"><%= inventory.tvTotal %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_with_epg') %></span><span class="font-semibold"><%= inventory.tvWithEpg %></span></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_linked') %></span><span class="font-semibold"><%= inventory.tvLinked %></span></div>
+        <div class="h-px bg-slate-800 my-0.5"></div>
+        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_streams_total') %></span><span class="font-semibold"><%= inventory.streamsTotal %></span></div>
         <div class="flex justify-between gap-3"><a href="/channels" class="text-indigo-400 hover:underline"><%= t('dashboard.inv_online') %></a><span class="font-semibold text-emerald-400"><%= inventory.streamsOnline %></span></div>
         <div class="flex justify-between gap-3"><a href="/channels" class="text-indigo-400 hover:underline"><%= t('dashboard.inv_offline') %></a><span class="font-semibold text-red-400"><%= inventory.streamsOffline %></span></div>
         <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_not_checked') %></span><span class="font-semibold text-slate-500"><%= inventory.streamsNotChecked %></span></div>
-      </div>
-    </div>
-    <div>
-      <h3 class="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5"><%= t('dashboard.inv_tv_channels') %></h3>
-      <div class="grid gap-1 text-xs">
-        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_total') %></span><span class="font-semibold"><%= inventory.tvTotal %></span></div>
-        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_active') %></span><span class="font-semibold"><%= inventory.tvActive %></span></div>
-        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_with_epg') %></span><span class="font-semibold"><%= inventory.tvWithEpg %></span></div>
-        <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_linked') %></span><span class="font-semibold"><%= inventory.tvLinked %></span></div>
       </div>
     </div>
     <div>
