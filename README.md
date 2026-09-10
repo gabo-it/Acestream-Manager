@@ -24,13 +24,13 @@ Donations don't fund further development — this project is maintained regardle
 <table>
 <tr>
 <td align="center"><b>Dashboard</b><br><a href="images/home.png"><img src="images/home.png" width="200"></a></td>
-<td align="center"><b>Dashboard</b><br><a href="images/home2.png"><img src="images/home2.png" width="200"></a></td>
-<td align="center"><b>Webplay</b><br><a href="images/webplay.png"><img src="images/webplay.png" width="200"></a></td>
+<td align="center"><b>Sources</b><br><a href="images/sources1.png"><img src="images/sources1.png" width="200"></a></td>
+<td align="center"><b>WebPlay</b><br><a href="images/webplay.png"><img src="images/webplay.png" width="200"></a></td>
 </tr>
 <tr>
-<td align="center"><b>Sources 1</b><br><a href="images/search.png"><img src="images/search.png" width="200"></a></td>
-<td align="center"><b>Search</b><br><a href="images/channels.png"><img src="images/channels.png" width="200"></a></td>
-<td align="center"><b>Settings</b><br><a href="images/sources1.png"><img src="images/sources1.png" width="200"></a></td>
+<td align="center"><b>Channels</b><br><a href="images/search.png"><img src="images/channels.png" width="200"></a></td>
+<td align="center"><b>Search</b><br><a href="images/channels.png"><img src="images/search.png" width="200"></a></td>
+<td align="center"><b>Statistics</b><br><a href="images/sources1.png"><img src="images/statistics.png" width="200"></a></td>
 </tr>
 </table>
 
