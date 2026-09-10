@@ -106,6 +106,9 @@ services:
       # Any official engine flag goes in this one line — reference:
       # https://docs.acestream.net/developers/engine-command-line-options/
       ENGINE_FLAGS: "--client-console --bind-all --live-cache-type memory"
+      # Containers default to UTC — edit to your IANA timezone (e.g.
+      # Europe/Rome) for correctly-timed container clocks/logs.
+      TZ: "UTC"
     expose:
       - "6677"
     ports:
@@ -137,6 +140,7 @@ services:
       ACEXY_NO_RESPONSE_TIMEOUT: 30s   # raise if streams fail with "timeout awaiting response headers"
       ACEXY_BUFFER_SIZE: 4.2MiB        # raise if playback is choppy
       ACEXY_CLIENT_EVICTION_TIMEOUT: 10s
+      TZ: "UTC"
     ports:
       - "8080:8080"
     networks:
@@ -152,6 +156,7 @@ services:
       PORT: "4000"
       DB_PATH: /data/acestream.db
       ACESTREAM_HTTP_PORT: "6677"
+      TZ: "UTC"
     volumes:
       - webui-data:/data
     ports:
@@ -276,6 +281,7 @@ Engine parameters (ports, bandwidth, cache, access token) live in `.env` — edi
 
 | Variable | Default | When to change it |
 |----------|---------|--------------------|
+| `TZ` | `UTC` | Set to your IANA timezone (e.g. `Europe/Rome`) — affects container clocks/logs and a couple of server-generated status strings; the web UI's own pages always show your browser's local time regardless |
 | `ACEXY_NO_RESPONSE_TIMEOUT` | `30s` | Raise if streams fail with "timeout awaiting response headers" |
 | `ACEXY_BUFFER_SIZE` | `4.2MiB` | Raise if playback is choppy vs. hitting the engine directly |
 | `ACEXY_CLIENT_EVICTION_TIMEOUT` | `10s` | Raise if brief player hiccups cause visible stutter |
@@ -428,7 +434,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.1-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

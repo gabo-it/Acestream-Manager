@@ -9,7 +9,7 @@ ARG UBUNTU_CODENAME=22.04
 ENV DOWNLOAD_URL="https://download.acestream.media/linux/acestream_${ACESTREAM_VERSION}_ubuntu_${UBUNTU_CODENAME}_x86_64_py3.10.tar.gz"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends wget ca-certificates \
+    && apt-get install -y --no-install-recommends wget ca-certificates tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Startup script: builds the engine's command-line flags from environment

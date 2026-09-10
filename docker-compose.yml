@@ -12,6 +12,7 @@ services:
       PORT: "${P2P_PORT:-44556}"
       ACCESS_TOKEN: "${ACCESS_TOKEN:-}"
       ENGINE_FLAGS: "${ENGINE_FLAGS:---client-console --bind-all --live-cache-type memory}"
+      TZ: "${TZ:-UTC}"
     # HTTP port published for the HLS playlist's native /ace/manifest.m3u8.
     # Set ACCESS_TOKEN above if this host is reachable beyond your LAN.
     expose:
@@ -45,6 +46,7 @@ services:
       ACEXY_HOST: acestream
       ACEXY_PORT: "${HTTP_PORT:-6677}"
       ACEXY_LISTEN_ADDR: ":8080"
+      TZ: "${TZ:-UTC}"
       # Raised from acexy's 1s default — the engine often needs longer to
       # find first peers, causing spurious timeout failures otherwise.
       ACEXY_NO_RESPONSE_TIMEOUT: "${ACEXY_NO_RESPONSE_TIMEOUT:-30s}"
@@ -69,6 +71,12 @@ services:
       DB_PATH: /data/acestream.db
       ENV_FILE_PATH: /config/.env
       ACESTREAM_HTTP_PORT: "${HTTP_PORT:-6677}"
+      # Containers default to UTC — the web UI itself always displays
+      # times in your browser's own timezone regardless of this (fixed
+      # separately), but this affects the container's own clock/logs and
+      # a couple of server-generated status strings (e.g. "Last EPG
+      # update"). Set to your IANA timezone, e.g. Europe/Rome.
+      TZ: "${TZ:-UTC}"
     volumes:
       - webui-data:/data
       - ./.env:/config/.env

@@ -50,12 +50,18 @@
       <div class="grid gap-1 text-xs">
         <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_tv_channels') %></span><span class="font-semibold"><%= inventory.tvTotal %></span></div>
         <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_with_epg') %></span><span class="font-semibold"><%= inventory.tvWithEpg %></span></div>
+        <div class="flex justify-between gap-3"><a href="/channels?filter=without_epg" class="text-indigo-400 hover:underline"><%= t('dashboard.inv_without_epg') %></a><span class="font-semibold <%= inventory.tvWithoutEpg > 0 ? 'text-amber-400' : '' %>"><%= inventory.tvWithoutEpg %></span></div>
         <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_linked') %></span><span class="font-semibold"><%= inventory.tvLinked %></span></div>
         <div class="h-px bg-slate-800 my-0.5"></div>
         <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_streams_total') %></span><span class="font-semibold"><%= inventory.streamsTotal %></span></div>
         <div class="flex justify-between gap-3"><a href="/channels" class="text-indigo-400 hover:underline"><%= t('dashboard.inv_online') %></a><span class="font-semibold text-emerald-400"><%= inventory.streamsOnline %></span></div>
         <div class="flex justify-between gap-3"><a href="/channels" class="text-indigo-400 hover:underline"><%= t('dashboard.inv_offline') %></a><span class="font-semibold text-red-400"><%= inventory.streamsOffline %></span></div>
         <div class="flex justify-between gap-3"><span class="text-slate-400"><%= t('dashboard.inv_not_checked') %></span><span class="font-semibold text-slate-500"><%= inventory.streamsNotChecked %></span></div>
+        <% if (inventory.lastCheckAllAt) { %>
+          <div class="flex justify-between gap-3 pt-0.5"><span class="text-slate-500"><%= t('dashboard.inv_last_check') %></span><span class="font-semibold text-slate-400" data-format-datetime="<%= inventory.lastCheckAllAt %>">—</span></div>
+        <% } else { %>
+          <div class="flex justify-between gap-3 pt-0.5"><span class="text-slate-500"><%= t('dashboard.inv_last_check') %></span><span class="font-semibold text-slate-600"><%= t('dashboard.inv_never') %></span></div>
+        <% } %>
       </div>
     </div>
     <div>
@@ -88,7 +94,7 @@
           <span class="min-w-0">
             <span class="block text-sm font-medium truncate"><%= ch.name %></span>
             <span class="block text-xs text-slate-500 truncate">
-              <%= new Date(ch.next.start_ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) %> · <%= ch.next.title %>
+              <span data-format-time="<%= ch.next.start_ts %>">—</span> · <%= ch.next.title %>
             </span>
           </span>
         </a>
@@ -136,9 +142,24 @@
         <div class="flex items-start gap-2 text-xs rounded-lg bg-slate-950/60 px-3 py-2">
           <span class="flex-shrink-0 rounded px-1.5 py-0.5 font-semibold uppercase text-[10px] <%= issue.level === 'error' ? 'bg-red-950 text-red-400' : 'bg-amber-950 text-amber-400' %>"><%= issue.level %></span>
           <span class="text-slate-400 flex-1 min-w-0 break-words"><%= issue.message %></span>
-          <span class="text-slate-600 flex-shrink-0"><%= new Date(issue.at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) %></span>
+          <span class="text-slate-600 flex-shrink-0" data-format-time="<%= issue.at %>">—</span>
         </div>
       <% }); %>
     </div>
   <% } %>
 </div>
+
+<script>
+  // Formatta lato browser, non lato server: il container gira in UTC di
+  // default (nessun fuso orario configurato) — formattare qui invece che
+  // nel template EJS garantisce che l'orario mostrato sia sempre quello
+  // reale dell'utente, qualunque fuso abbia il server.
+  document.querySelectorAll('[data-format-time]').forEach(function (el) {
+    var ts = parseInt(el.dataset.formatTime, 10);
+    if (ts) el.textContent = new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  });
+  document.querySelectorAll('[data-format-datetime]').forEach(function (el) {
+    var ts = parseInt(el.dataset.formatDatetime, 10);
+    if (ts) el.textContent = new Date(ts).toLocaleString('en-US');
+  });
+</script>

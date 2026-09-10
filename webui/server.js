@@ -72,12 +72,29 @@ function render(res, view, locals = {}) {
 // Condivisa tra / (gestione canali) e /tv (vista compatta orientata alla
 // riproduzione) — entrambe mostrano la stessa lista con anteprima
 // now/next, evitando di duplicare la logica di traduzione.
-function getChannelsWithNowNext(searchQuery) {
-  const channels = searchQuery
-    ? db
-        .prepare('SELECT * FROM channels WHERE name LIKE ? OR category LIKE ? ORDER BY sort_order, name COLLATE NOCASE')
-        .all(`%${searchQuery}%`, `%${searchQuery}%`)
-    : db.prepare('SELECT * FROM channels ORDER BY sort_order, name COLLATE NOCASE').all();
+// filter === 'without_epg': solo canali senza un tvg_id valorizzato, o
+// con un tvg_id che non corrisponde a nessun programma importato —
+// stessa definizione di "senza EPG" usata dal widget Inventory.
+function getChannelsWithNowNext(searchQuery, filter) {
+  let channels;
+  if (filter === 'without_epg') {
+    const searchClause = searchQuery ? 'AND (name LIKE ? OR category LIKE ?)' : '';
+    const params = searchQuery ? [`%${searchQuery}%`, `%${searchQuery}%`] : [];
+    channels = db
+      .prepare(
+        `SELECT * FROM channels c
+         WHERE (c.tvg_id = '' OR NOT EXISTS (SELECT 1 FROM programs p WHERE p.tvg_id = c.tvg_id))
+         ${searchClause}
+         ORDER BY sort_order, name COLLATE NOCASE`
+      )
+      .all(...params);
+  } else {
+    channels = searchQuery
+      ? db
+          .prepare('SELECT * FROM channels WHERE name LIKE ? OR category LIKE ? ORDER BY sort_order, name COLLATE NOCASE')
+          .all(`%${searchQuery}%`, `%${searchQuery}%`)
+      : db.prepare('SELECT * FROM channels ORDER BY sort_order, name COLLATE NOCASE').all();
+  }
 
   const epgByChannel = {};
   const tvgIdCounts = {};
@@ -120,9 +137,33 @@ function getChannelsWithNowNext(searchQuery) {
 
 app.get('/channels', async (req, res) => {
   const q = (req.query.q || '').trim();
-  const { channels, epgByChannel, tvgIdCounts } = getChannelsWithNowNext(q);
+  const filter = req.query.filter === 'without_epg' ? 'without_epg' : '';
+  const { channels, epgByChannel, tvgIdCounts } = getChannelsWithNowNext(q, filter);
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
-  render(res, 'index', { titleKey: 'channels.title', channels, epgByChannel, tvgIdCounts, q, acexyBaseUrl });
+  render(res, 'index', {
+    titleKey: 'channels.title',
+    channels,
+    epgByChannel,
+    tvgIdCounts,
+    q,
+    filter,
+    acexyBaseUrl,
+    checkMode: getSetting('channels_check_mode', 'off'),
+    checkIntervalHours: getSetting('channels_check_interval_hours', '6'),
+    checkTime: getSetting('channels_check_time', '04:00'),
+    lastCheckAllAt: getSetting('channels_last_check_all_at', ''),
+  });
+});
+
+app.post('/channels/schedule-check', (req, res) => {
+  const mode = ['off', 'interval', 'time'].includes(req.body.mode) ? req.body.mode : 'off';
+  const allowedHours = new Set(['1', '3', '6', '12', '24']);
+  const intervalHours = allowedHours.has(req.body.interval_hours) ? req.body.interval_hours : '6';
+  const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(req.body.time || '') ? req.body.time : '04:00';
+  setSetting('channels_check_mode', mode);
+  setSetting('channels_check_interval_hours', intervalHours);
+  setSetting('channels_check_time', time);
+  res.redirect('/channels');
 });
 
 // Dashboard: colpo d'occhio su cosa sta succedendo (canali configurati,
@@ -172,6 +213,15 @@ app.get('/', (req, res) => {
        WHERE c.tvg_id != '' AND EXISTS (SELECT 1 FROM programs p WHERE p.tvg_id = c.tvg_id)`
     )
     .get().c;
+  // Stessa definizione usata dal filtro ?filter=without_epg in /channels
+  // (righe canale, non tvg_id distinti) — così il numero qui e quello che
+  // si vede cliccando corrispondono sempre.
+  const channelsWithoutEpg = db
+    .prepare(
+      `SELECT COUNT(*) as c FROM channels c
+       WHERE c.tvg_id = '' OR NOT EXISTS (SELECT 1 FROM programs p WHERE p.tvg_id = c.tvg_id)`
+    )
+    .get().c;
   const tvChannelLinked = db
     .prepare(
       `SELECT COUNT(*) as c FROM (
@@ -196,6 +246,7 @@ app.get('/', (req, res) => {
     streamsNotChecked: streamStats.notChecked,
     tvTotal: tvChannelTotal,
     tvWithEpg: tvChannelWithEpg,
+    tvWithoutEpg: channelsWithoutEpg,
     tvLinked: tvChannelLinked,
     sourceUrlsTotal: sourceRows.length,
     sourceUrlsEnabled: sourceEnabled,
@@ -203,6 +254,8 @@ app.get('/', (req, res) => {
     epgSourceCount,
     guideChannels: guideChannelsCount,
     programmes: programmesCount,
+    lastCheckAllAt: getSetting('channels_last_check_all_at', ''),
+    checkMode: getSetting('channels_check_mode', 'off'),
   };
 
   render(res, 'dashboard', {
@@ -296,6 +349,7 @@ app.post('/channels/:id/check-status', async (req, res) => {
 app.post('/channels/check-all', async (req, res) => {
   try {
     await checkAllChannels();
+    setSetting('channels_last_check_all_at', String(Date.now()));
   } catch (err) {
     console.error('[status] bulk check error:', err.message);
   }
@@ -1250,6 +1304,43 @@ refreshEpg().catch((err) => console.error('[epg] initial refresh failed:', err))
 // intervallo globale). Le sorgenti manuali non vengono mai toccate qui.
 cron.schedule('7 * * * *', () => {
   refreshDueSources().catch((err) => console.error('[sources] auto-refresh failed:', err));
+});
+
+// Controllo schedulato dello stato di tutti i canali (online/offline) —
+// due modalità alternative, non per singola fonte ma un'unica
+// impostazione globale (a differenza dell'auto-refresh delle fonti sopra):
+// "interval" confronta da quanto tempo è passato dall'ultima verifica
+// completa rispetto all'intervallo scelto; "time" verifica se siamo
+// nell'ora programmata e non abbiamo già girato oggi.
+cron.schedule('12 * * * *', async () => {
+  const mode = getSetting('channels_check_mode', 'off');
+  if (mode === 'off') return;
+
+  const lastAt = parseInt(getSetting('channels_last_check_all_at', '0'), 10) || 0;
+  const now = new Date();
+  let due = false;
+
+  if (mode === 'interval') {
+    const hours = parseInt(getSetting('channels_check_interval_hours', '6'), 10) || 6;
+    due = Date.now() - lastAt >= hours * 60 * 60 * 1000;
+  } else if (mode === 'time') {
+    const scheduledTime = getSetting('channels_check_time', '04:00');
+    const scheduledHour = scheduledTime.slice(0, 2);
+    const currentHour = String(now.getHours()).padStart(2, '0');
+    // Confronto solo sull'ora (il cron gira una volta l'ora, ai minuti
+    // :12) — evita di rigirare più volte nella stessa ora confrontando
+    // anche la data dell'ultima esecuzione.
+    const alreadyRanToday = lastAt && new Date(lastAt).toDateString() === now.toDateString();
+    due = scheduledHour === currentHour && !alreadyRanToday;
+  }
+
+  if (!due) return;
+  try {
+    await checkAllChannels();
+    setSetting('channels_last_check_all_at', String(Date.now()));
+  } catch (err) {
+    console.error('[status] scheduled check failed:', err.message);
+  }
 });
 
 app.listen(PORT, () => {

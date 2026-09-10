@@ -1,14 +1,48 @@
-<div class="flex items-center justify-between mb-8 gap-4 flex-wrap">
+<div class="flex items-center justify-between mb-4 gap-4 flex-wrap">
   <h1 class="text-3xl font-bold tracking-tight">
     <%= t('channels.title') %>
     <span class="text-slate-500 text-lg font-normal ml-1">(<%= channels.length %>)</span>
   </h1>
   <div class="flex items-center gap-2">
     <form method="GET" action="/channels" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
+      <% if (filter) { %><input type="hidden" name="filter" value="<%= filter %>" /><% } %>
       <input type="text" name="q" value="<%= q || '' %>" placeholder="<%= t('channels.search_placeholder') %>"
              class="bg-transparent px-3.5 py-2.5 text-sm focus:outline-none w-56 placeholder:text-slate-600" />
       <button class="px-3.5 py-2.5 text-slate-500 hover:text-indigo-400 transition"><%= t('channels.search_btn') %></button>
     </form>
+    <div class="relative">
+      <button type="button" onclick="toggleCheckSchedule()" class="rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-900 transition px-3 py-2.5 text-sm text-slate-400 whitespace-nowrap">
+        ⏱️ <%= checkMode !== 'off' ? t('channels.schedule_active') : t('channels.schedule_btn') %>
+      </button>
+      <div id="check-schedule-panel" class="hidden absolute right-0 top-full mt-2 z-20 w-72 rounded-xl border border-slate-800 bg-slate-900 shadow-xl p-4">
+        <form method="POST" action="/channels/schedule-check" class="grid gap-3">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name="mode" value="off" <%= checkMode === 'off' ? 'checked' : '' %> class="text-indigo-600" />
+            <%= t('channels.schedule_off') %>
+          </label>
+          <label class="flex items-center gap-2 text-sm flex-wrap">
+            <input type="radio" name="mode" value="interval" <%= checkMode === 'interval' ? 'checked' : '' %> class="text-indigo-600" />
+            <%= t('channels.schedule_interval') %>
+            <select name="interval_hours" class="rounded-lg bg-slate-950 border border-slate-800 px-2 py-1 text-xs">
+              <% ['1', '3', '6', '12', '24'].forEach(function(h) { %>
+                <option value="<%= h %>" <%= checkIntervalHours === h ? 'selected' : '' %>><%= h %>h</option>
+              <% }); %>
+            </select>
+          </label>
+          <label class="flex items-center gap-2 text-sm flex-wrap">
+            <input type="radio" name="mode" value="time" <%= checkMode === 'time' ? 'checked' : '' %> class="text-indigo-600" />
+            <%= t('channels.schedule_time') %>
+            <input type="time" name="time" value="<%= checkTime %>" class="rounded-lg bg-slate-950 border border-slate-800 px-2 py-1 text-xs" />
+          </label>
+          <% if (lastCheckAllAt) { %>
+            <p class="text-xs text-slate-500 pt-1 border-t border-slate-800"><%= t('channels.schedule_last_run') %>: <span id="last-check-time" data-ts="<%= lastCheckAllAt %>">—</span></p>
+          <% } %>
+          <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-3 py-2 text-sm font-medium">
+            <%= t('settings.save') %>
+          </button>
+        </form>
+      </div>
+    </div>
     <form method="POST" action="/channels/check-all">
       <button class="rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-900 transition px-4 py-2.5 text-sm font-medium text-slate-300">
         <%= t('channels.check_all') %>
@@ -18,6 +52,37 @@
       <%= t('channels.new') %>
     </a>
   </div>
+</div>
+
+<script>
+  function toggleCheckSchedule() {
+    document.getElementById('check-schedule-panel').classList.toggle('hidden');
+  }
+  document.addEventListener('click', function (e) {
+    var panel = document.getElementById('check-schedule-panel');
+    if (!panel || panel.classList.contains('hidden')) return;
+    if (!panel.contains(e.target) && !e.target.closest('[onclick="toggleCheckSchedule()"]')) {
+      panel.classList.add('hidden');
+    }
+  });
+  var lastCheckEl = document.getElementById('last-check-time');
+  if (lastCheckEl) {
+    var ts = parseInt(lastCheckEl.dataset.ts, 10);
+    if (ts) lastCheckEl.textContent = new Date(ts).toLocaleString('en-US');
+  }
+</script>
+
+<div class="mb-6">
+  <% if (filter === 'without_epg') { %>
+    <span class="inline-flex items-center gap-2 text-xs rounded-full bg-amber-950/60 border border-amber-800/60 text-amber-300 px-3 py-1.5">
+      <%= t('channels.filter_without_epg_active') %>
+      <a href="/channels<%= q ? '?q=' + encodeURIComponent(q) : '' %>" class="hover:text-white transition">✕</a>
+    </span>
+  <% } else { %>
+    <a href="/channels?filter=without_epg" class="text-xs text-slate-500 hover:text-indigo-400 transition">
+      <%= t('channels.filter_without_epg_link') %>
+    </a>
+  <% } %>
 </div>
 
 <% if (channels.length === 0) { %>
@@ -45,19 +110,17 @@
       <% channels.forEach(function(ch) { %>
         <% const acexy = (acexyBaseUrl || '').replace(/\/$/, ''); %>
         <% const streamUrl = `${acexy}/ace/getstream?id=${ch.acestream_id}`; %>
-        <% const statusStyle = ch.status === 'online'
-             ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
-             : ch.status === 'offline'
-             ? 'bg-red-950/60 text-red-400 border-red-900/60'
-             : 'bg-slate-800/60 text-slate-500 border-slate-700/60'; %>
+        <% const dotColor = ch.status === 'online' ? 'bg-emerald-500' : ch.status === 'offline' ? 'bg-red-500' : 'bg-slate-600'; %>
         <div class="group rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-950/40 transition-all">
           <div class="p-4 flex items-center gap-4">
             <input type="checkbox" name="ids" value="<%= ch.id %>" class="channel-checkbox rounded bg-slate-950 border-slate-700 flex-shrink-0" />
-            <img src="<%= ch.logo_url || 'https://placehold.co/64x64/1e293b/94a3b8?text=%20' %>"
-                 class="w-12 h-12 rounded-xl object-cover bg-slate-800 ring-1 ring-slate-700/60 flex-shrink-0" alt="" />
+            <div class="relative flex-shrink-0">
+              <img src="<%= ch.logo_url || 'https://placehold.co/64x64/1e293b/94a3b8?text=%20' %>"
+                   class="w-12 h-12 rounded-xl object-cover bg-slate-800 ring-1 ring-slate-700/60" alt="" />
+              <span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-950 <%= dotColor %>" title="<%= ch.status || 'unknown' %>"></span>
+            </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-[10px] font-medium uppercase tracking-wide rounded-md border px-1.5 py-0.5 flex-shrink-0 <%= statusStyle %>"><%= ch.status || '—' %></span>
                 <button type="button" class="font-semibold truncate group-hover:text-indigo-300 transition text-left"
                         onclick="toggleSchedule(<%= ch.id %>, '<%= ch.tvg_id %>')">
                   <%= ch.name %>

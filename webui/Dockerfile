@@ -5,7 +5,7 @@ FROM node:20-slim
 # MediaSource Extensions/mpegts.js non funziona su un flusso — non è
 # richiesto per nient'altro nello stack.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 make g++ ffmpeg \
+    && apt-get install -y --no-install-recommends python3 make g++ ffmpeg tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

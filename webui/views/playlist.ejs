@@ -113,7 +113,7 @@
                 <% } else { %>
                   <span class="text-slate-500">
                     <%= item.stats.program_count %> <%= t('playlist.epg_programs') %> ·
-                    <%= t('playlist.epg_last_fetch') %>: <%= new Date(item.stats.last_fetch_at).toLocaleString('en-US') %>
+                    <%= t('playlist.epg_last_fetch') %>: <span data-format-datetime="<%= item.stats.last_fetch_at %>">—</span>
                   </span>
                 <% } %>
               </div>
@@ -224,4 +224,12 @@
       alert(url);
     });
   }
+
+  // Formatta lato browser, non lato server: il container gira in UTC di
+  // default — formattare qui garantisce che l'orario mostrato sia
+  // sempre quello reale dell'utente, qualunque fuso abbia il server.
+  document.querySelectorAll('[data-format-datetime]').forEach(function (el) {
+    var ts = parseInt(el.dataset.formatDatetime, 10);
+    if (ts) el.textContent = new Date(ts).toLocaleString('en-US');
+  });
 </script>

@@ -21,6 +21,9 @@ services:
       # Any official engine flag goes in this one line — reference:
       # https://docs.acestream.net/developers/engine-command-line-options/
       ENGINE_FLAGS: "--client-console --bind-all --live-cache-type memory"
+      # Containers default to UTC — edit to your IANA timezone (e.g.
+      # Europe/Rome) for correctly-timed container clocks/logs.
+      TZ: "UTC"
     expose:
       - "6677"
     ports:
@@ -52,6 +55,7 @@ services:
       ACEXY_NO_RESPONSE_TIMEOUT: 30s   # raise if streams fail with "timeout awaiting response headers"
       ACEXY_BUFFER_SIZE: 4.2MiB        # raise if playback is choppy
       ACEXY_CLIENT_EVICTION_TIMEOUT: 10s
+      TZ: "UTC"
     ports:
       - "8080:8080"
     networks:
@@ -67,6 +71,7 @@ services:
       PORT: "4000"
       DB_PATH: /data/acestream.db
       ACESTREAM_HTTP_PORT: "6677"
+      TZ: "UTC"
     volumes:
       - webui-data:/data
     ports:
