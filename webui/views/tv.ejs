@@ -31,9 +31,14 @@
 
         <div class="flex-1 min-w-0 rounded-lg bg-slate-950/60 border border-slate-800/60 px-3 py-2">
           <% if (epg.now) { %>
-            <p class="text-sm text-slate-200 truncate"><%= epg.now.title %></p>
+            <p class="text-sm text-slate-200 truncate">
+              <span class="text-slate-500 font-mono text-xs" data-tv-format-range="<%= epg.now.start_ts %>|<%= epg.now.stop_ts %>">—</span>
+              <%= epg.now.title %>
+            </p>
             <% if (epg.next) { %>
-              <p class="text-xs text-slate-500 truncate mt-0.5"><%= t('tv.next_label') %>: <%= epg.next.title %></p>
+              <p class="text-xs text-slate-500 truncate mt-0.5">
+                <%= t('tv.next_label') %> (<span data-tv-format-time="<%= epg.next.start_ts %>">—</span>): <%= epg.next.title %>
+              </p>
             <% } %>
           <% } else { %>
             <p class="text-sm text-slate-600"><%= t('tv.no_epg') %></p>
@@ -220,5 +225,17 @@
       var frame = document.getElementById('tv-player-frame');
       if (frame) frame.style.height = Math.max(300, event.data.height) + 'px';
     }
+  });
+
+  // Orari now/next nell'elenco canali, formattati lato browser (stesso
+  // motivo del pannello Programmazione: il container gira in UTC di
+  // default, solo il browser conosce il vero fuso orario dell'utente).
+  document.querySelectorAll('[data-tv-format-time]').forEach(function (el) {
+    var ts = parseInt(el.dataset.tvFormatTime, 10);
+    if (ts) el.textContent = formatTime(ts);
+  });
+  document.querySelectorAll('[data-tv-format-range]').forEach(function (el) {
+    var parts = el.dataset.tvFormatRange.split('|').map(function (s) { return parseInt(s, 10); });
+    if (parts[0] && parts[1]) el.textContent = formatTime(parts[0]) + '–' + formatTime(parts[1]);
   });
 </script>

@@ -2,6 +2,18 @@
 <p class="text-sm text-slate-500 mb-6"><%= t('addons.subtitle') %></p>
 
 <div class="max-w-2xl rounded-xl border border-slate-800 bg-slate-800/60 p-6 mb-6">
+  <h2 class="font-semibold mb-1">☁️ <%= t('addons.warp_title') %></h2>
+  <p class="text-xs text-slate-500 mb-1"><%= t('addons.warp_help') %></p>
+  <p class="text-xs text-amber-400 mb-4"><%= t('addons.warp_permission_warning') %></p>
+  <div class="flex items-center gap-3">
+    <button type="button" id="warp-check-btn" class="text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-3 py-1.5">
+      <%= t('addons.warp_check') %>
+    </button>
+    <span id="warp-status" class="text-xs text-slate-500">—</span>
+  </div>
+</div>
+
+<div class="max-w-2xl rounded-xl border border-slate-800 bg-slate-800/60 p-6 mb-6">
   <h2 class="font-semibold mb-1">📺 <%= t('addons.vlc_title') %></h2>
   <p class="text-xs text-slate-500 mb-4"><%= t('addons.vlc_help') %></p>
 
@@ -139,17 +151,6 @@
   </div>
 </div>
 
-<div class="max-w-2xl rounded-xl border border-slate-800 bg-slate-800/60 p-6 mb-6">
-  <h2 class="font-semibold mb-1">☁️ <%= t('addons.warp_title') %></h2>
-  <p class="text-xs text-slate-500 mb-1"><%= t('addons.warp_help') %></p>
-  <p class="text-xs text-amber-400 mb-4"><%= t('addons.warp_permission_warning') %></p>
-  <div class="flex items-center gap-3">
-    <button type="button" id="warp-check-btn" class="text-xs rounded-lg border border-slate-700 hover:bg-slate-800 transition px-3 py-1.5">
-      <%= t('addons.warp_check') %>
-    </button>
-    <span id="warp-status" class="text-xs text-slate-500">—</span>
-  </div>
-</div>
 
 <div class="max-w-2xl rounded-xl border border-dashed border-slate-800 bg-slate-900/30 p-6 text-sm text-slate-500">
   <%= t('addons.more_coming') %>

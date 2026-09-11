@@ -176,15 +176,24 @@ app.get('/', (req, res) => {
   const epgLastResult = getSetting('epg_last_result', '');
   const libretranslateConfigured = !!getSetting('libretranslate_url', '');
 
-  // "Coming up next": programs starting within the next 2 hours — a
-  // forward-looking view of the schedule.
+  // "Coming up next": programs starting within the next 24 hours — vista
+  // scorrevole, niente più tetto artificiale a 6 elementi dato che ora è
+  // possibile scorrere orizzontalmente.
   const { channels, epgByChannel } = getChannelsWithNowNext('');
-  const twoHoursMs = 2 * 60 * 60 * 1000;
+  const oneDayMs = 24 * 60 * 60 * 1000;
   const comingUpNext = channels
-    .filter((ch) => epgByChannel[ch.id] && epgByChannel[ch.id].next && epgByChannel[ch.id].next.start_ts - Date.now() < twoHoursMs)
+    .filter((ch) => epgByChannel[ch.id] && epgByChannel[ch.id].next && epgByChannel[ch.id].next.start_ts - Date.now() < oneDayMs)
     .map((ch) => ({ id: ch.id, name: ch.name, logoUrl: ch.logo_url, next: epgByChannel[ch.id].next }))
-    .sort((a, b) => a.next.start_ts - b.next.start_ts)
-    .slice(0, 6);
+    .sort((a, b) => a.next.start_ts - b.next.start_ts);
+
+  // "On Air": tutti i canali con un programma in corso in questo
+  // momento, ordinati dal più recente iniziato al più datato — non un
+  // sottoinsieme arbitrario dei primi canali della lista, ma l'elenco
+  // completo di cosa è realmente in onda ora.
+  const onAir = channels
+    .filter((ch) => epgByChannel[ch.id] && epgByChannel[ch.id].now)
+    .map((ch) => ({ id: ch.id, name: ch.name, logoUrl: ch.logo_url, now: epgByChannel[ch.id].now }))
+    .sort((a, b) => b.now.start_ts - a.now.start_ts);
 
   // Recently added channels — the library view, distinct from the
   // schedule-based widgets above.
@@ -266,6 +275,7 @@ app.get('/', (req, res) => {
     epgLastResult,
     libretranslateConfigured,
     comingUpNext,
+    onAir,
     recentChannels,
     inventory,
     recentIssues: getRecentIssues(15),

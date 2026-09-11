@@ -41,6 +41,59 @@
   </a>
 </div>
 
+<!-- In onda ora -->
+<% if (onAir.length > 0) { %>
+  <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
+    <h2 class="font-semibold mb-3 flex items-center gap-2">
+      <span class="relative flex h-2 w-2">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+      </span>
+      <%= t('dashboard.on_air') %>
+    </h2>
+    <div class="grid gap-2 max-h-72 overflow-y-auto pr-1">
+      <% onAir.forEach(function(ch) { %>
+        <a href="/tv?q=<%= encodeURIComponent(ch.name) %>" class="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5">
+          <% if (ch.logoUrl) { %>
+            <img src="<%= ch.logoUrl %>" alt="" class="w-8 h-8 rounded-lg object-contain bg-slate-900 ring-1 ring-slate-700/60 flex-shrink-0" onerror="this.style.display='none'" />
+          <% } %>
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium truncate"><%= ch.name %></span>
+            <span class="block text-xs text-slate-500 truncate">
+              <span data-format-time="<%= ch.now.start_ts %>">—</span>–<span data-format-time="<%= ch.now.stop_ts %>">—</span> · <%= ch.now.title %>
+            </span>
+            <span class="block h-1 rounded-full bg-slate-800 mt-1.5 overflow-hidden">
+              <span class="block h-full bg-red-500/70 rounded-full" data-progress-start="<%= ch.now.start_ts %>" data-progress-stop="<%= ch.now.stop_ts %>" style="width: 0%"></span>
+            </span>
+          </span>
+        </a>
+      <% }); %>
+    </div>
+  </div>
+<% } %>
+
+<!-- In arrivo nelle prossime 24 ore -->
+<% if (comingUpNext.length > 0) { %>
+  <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
+    <h2 class="font-semibold mb-3">⏱️ <%= t('dashboard.coming_up_next') %></h2>
+    <div class="grid gap-2 max-h-72 overflow-y-auto pr-1">
+      <% comingUpNext.forEach(function(ch) { %>
+        <a href="/tv?q=<%= encodeURIComponent(ch.name) %>" class="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5">
+          <% if (ch.logoUrl) { %>
+            <img src="<%= ch.logoUrl %>" alt="" class="w-8 h-8 rounded-lg object-contain bg-slate-900 ring-1 ring-slate-700/60 flex-shrink-0" onerror="this.style.display='none'" />
+          <% } %>
+          <span class="min-w-0">
+            <span class="block text-sm font-medium truncate"><%= ch.name %></span>
+            <span class="block text-xs text-slate-500 truncate">
+              <span data-format-time="<%= ch.next.start_ts %>">—</span> · <%= ch.next.title %>
+            </span>
+          </span>
+        </a>
+      <% }); %>
+    </div>
+  </div>
+<% } %>
+
 <!-- Inventory -->
 <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-4 mb-6">
   <h2 class="font-semibold mb-3 text-sm"><%= t('dashboard.inventory_title') %></h2>
@@ -80,28 +133,6 @@
     </div>
   </div>
 </div>
-
-<!-- In arrivo a breve -->
-<% if (comingUpNext.length > 0) { %>
-  <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
-    <h2 class="font-semibold mb-3">⏱️ <%= t('dashboard.coming_up_next') %></h2>
-    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-      <% comingUpNext.forEach(function(ch) { %>
-        <a href="/tv?q=<%= encodeURIComponent(ch.name) %>" class="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5">
-          <% if (ch.logoUrl) { %>
-            <img src="<%= ch.logoUrl %>" alt="" class="w-8 h-8 rounded-lg object-contain bg-slate-900 ring-1 ring-slate-700/60 flex-shrink-0" onerror="this.style.display='none'" />
-          <% } %>
-          <span class="min-w-0">
-            <span class="block text-sm font-medium truncate"><%= ch.name %></span>
-            <span class="block text-xs text-slate-500 truncate">
-              <span data-format-time="<%= ch.next.start_ts %>">—</span> · <%= ch.next.title %>
-            </span>
-          </span>
-        </a>
-      <% }); %>
-    </div>
-  </div>
-<% } %>
 
 <!-- Aggiunti di recente -->
 <% if (recentChannels.length > 0) { %>
@@ -162,4 +193,20 @@
     var ts = parseInt(el.dataset.formatDatetime, 10);
     if (ts) el.textContent = new Date(ts).toLocaleString('en-US');
   });
+
+  // Barra di progressione "on air": percentuale già trascorsa del
+  // programma in corso, calcolata lato browser. Si aggiorna ogni minuto
+  // per restare corretta anche senza ricaricare la pagina.
+  function updateProgressBars() {
+    document.querySelectorAll('[data-progress-start]').forEach(function (el) {
+      var start = parseInt(el.dataset.progressStart, 10);
+      var stop = parseInt(el.dataset.progressStop, 10);
+      if (!start || !stop || stop <= start) return;
+      var pct = ((Date.now() - start) / (stop - start)) * 100;
+      pct = Math.max(0, Math.min(100, pct));
+      el.style.width = pct + '%';
+    });
+  }
+  updateProgressBars();
+  setInterval(updateProgressBars, 60000);
 </script>
