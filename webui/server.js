@@ -75,25 +75,24 @@ function render(res, view, locals = {}) {
 // filter === 'without_epg': solo canali senza un tvg_id valorizzato, o
 // con un tvg_id che non corrisponde a nessun programma importato —
 // stessa definizione di "senza EPG" usata dal widget Inventory.
+//
+// La ricerca testuale (searchQuery) confronta nome/categoria E i titoli
+// now/next — per questo calcoliamo prima now/next per l'intera base
+// (senza filtro testo) e filtriamo DOPO in JS, invece di scrivere una
+// sottoquery SQL con condizioni temporali per "now"/"next": più semplice
+// da leggere, e riusa la stessa funzione getNowNext già usata altrove.
 function getChannelsWithNowNext(searchQuery, filter) {
   let channels;
   if (filter === 'without_epg') {
-    const searchClause = searchQuery ? 'AND (name LIKE ? OR category LIKE ?)' : '';
-    const params = searchQuery ? [`%${searchQuery}%`, `%${searchQuery}%`] : [];
     channels = db
       .prepare(
         `SELECT * FROM channels c
          WHERE (c.tvg_id = '' OR NOT EXISTS (SELECT 1 FROM programs p WHERE p.tvg_id = c.tvg_id))
-         ${searchClause}
          ORDER BY sort_order, name COLLATE NOCASE`
       )
-      .all(...params);
+      .all();
   } else {
-    channels = searchQuery
-      ? db
-          .prepare('SELECT * FROM channels WHERE name LIKE ? OR category LIKE ? ORDER BY sort_order, name COLLATE NOCASE')
-          .all(`%${searchQuery}%`, `%${searchQuery}%`)
-      : db.prepare('SELECT * FROM channels ORDER BY sort_order, name COLLATE NOCASE').all();
+    channels = db.prepare('SELECT * FROM channels ORDER BY sort_order, name COLLATE NOCASE').all();
   }
 
   const epgByChannel = {};
@@ -109,7 +108,9 @@ function getChannelsWithNowNext(searchQuery, filter) {
   // pagine devono restare sempre istantanee, non aspettare mai una
   // traduzione in corso. Le vere chiamate di rete avvengono solo nel job
   // in background (vedi epg.js) — un titolo non ancora tradotto qui
-  // resta nella lingua originale fino al prossimo giro.
+  // resta nella lingua originale fino al prossimo giro. Fatto PRIMA del
+  // filtro testo, così la ricerca confronta lo stesso titolo che l'utente
+  // vede davvero (tradotto, se la traduzione è attiva).
   const epgLanguage = getSetting('epg_language', '');
   if (epgLanguage && getSetting('epg_translate_ui', '1') === '1') {
     const flatTitles = [];
@@ -130,6 +131,19 @@ function getChannelsWithNowNext(searchQuery, filter) {
         ref.title = translated[i];
       });
     }
+  }
+
+  if (searchQuery) {
+    const needle = searchQuery.toLowerCase();
+    channels = channels.filter((ch) => {
+      const epg = epgByChannel[ch.id];
+      return (
+        ch.name.toLowerCase().includes(needle) ||
+        (ch.category || '').toLowerCase().includes(needle) ||
+        (epg.now && epg.now.title.toLowerCase().includes(needle)) ||
+        (epg.next && epg.next.title.toLowerCase().includes(needle))
+      );
+    });
   }
 
   return { channels, epgByChannel, tvgIdCounts };

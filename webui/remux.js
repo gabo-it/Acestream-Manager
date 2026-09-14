@@ -42,11 +42,28 @@ function remuxToFmp4(acestreamId, res) {
   res.setHeader('Content-Type', 'video/mp4');
   ffmpeg.stdout.pipe(res);
 
+  // ffmpeg scrive il proprio log di progresso su stderr per design — non
+  // è un errore. Logghiamo solo se sembra un problema vero, per non
+  // intasare i log con l'output di stato normale.
+  //
+  // Il pattern "decode_slice_header error / non-existing PPS referenced"
+  // è la firma nota di stream con un'irregolarità H.264 già documentata
+  // (vedi README, sezione Troubleshooting) — Firefox la tollera,
+  // Chrome/ffmpeg no, e non è risolvibile lato nostro. ffmpeg la ripete
+  // per ogni frame che non riesce a decodificare, quindi senza questo
+  // filtro un singolo stream problematico produce decine di righe quasi
+  // identiche nel widget "Recent issues" — segnaliamo il pattern noto
+  // una sola volta per sessione, non una volta per riga.
+  let knownIssueLogged = false;
   ffmpeg.stderr.on('data', (chunk) => {
-    // ffmpeg scrive il proprio log di progresso su stderr per design —
-    // non è un errore. Logghiamo solo se sembra un problema vero, per non
-    // intasare i log con l'output di stato normale.
     const text = chunk.toString();
+    if (/decode_slice_header error|non-existing PPS/i.test(text)) {
+      if (!knownIssueLogged) {
+        knownIssueLogged = true;
+        console.log('[remux] known H.264 stream irregularity detected (see README troubleshooting) — Chrome/ffmpeg may fail, Firefox/VLC typically still work');
+      }
+      return;
+    }
     if (/error|failed|invalid|No such file/i.test(text)) {
       console.error('[remux]', text.trim());
     }

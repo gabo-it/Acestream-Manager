@@ -189,6 +189,7 @@
     noTvgId: <%- JSON.stringify(t('schedule.no_tvg_id')) %>,
     empty: <%- JSON.stringify(t('schedule.empty')) %>,
     loading: <%- JSON.stringify(t('schedule.loading')) %>,
+    nowAiring: <%- JSON.stringify(t('schedule.now_airing')) %>,
     copied: <%- JSON.stringify(t('channels.copied')) %>,
     error: <%- JSON.stringify(t('channels.error')) %>,
     tvgNoSuggestions: <%- JSON.stringify(t('channels.tvg_no_suggestions')) %>,
@@ -249,10 +250,13 @@
       html += '<p class="text-slate-500">' + i18n.empty + '</p>';
     } else {
       html += '<div class="grid gap-1.5">';
+      var nowTs = Date.now();
       data.programs.forEach(function (p) {
-        html += '<div class="flex gap-3">';
+        var isNowAiring = p.start <= nowTs && p.stop > nowTs;
+        html += '<div class="flex gap-3 items-baseline' + (isNowAiring ? ' rounded-lg bg-indigo-950/50 border border-indigo-800/50 px-2 py-1 -mx-2' : '') + '">';
         html += '<span class="text-slate-500 font-mono flex-shrink-0">' + formatTime(p.start) + '–' + formatTime(p.stop) + '</span>';
-        html += '<span class="text-slate-200">' + p.title + '</span>';
+        html += '<span class="' + (isNowAiring ? 'text-indigo-200 font-medium' : 'text-slate-200') + '">' + p.title + '</span>';
+        if (isNowAiring) html += '<span class="text-[10px] font-semibold uppercase text-indigo-400 flex-shrink-0">' + i18n.nowAiring + '</span>';
         html += '</div>';
       });
       html += '</div>';

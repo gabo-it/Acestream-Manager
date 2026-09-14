@@ -13,6 +13,8 @@
 
   <p id="player-status" class="text-xs text-slate-500 mt-2"></p>
 
+  <div id="stream-info" class="hidden mt-3 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs text-slate-400 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1"></div>
+
   <p id="player-error" class="hidden mt-4 rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm">
     <span id="player-error-detail"></span><br />
     <%= t('watch.fallback_before') %>
@@ -22,7 +24,16 @@
     <br /><span class="text-xs text-amber-400"><%= t('watch.chromium_hint') %></span>
   </p>
 
-  <p class="text-xs text-slate-500 mt-3 font-mono break-all"><%= t('watch.direct_link_label') %>: <%= streamUrl %></p>
+  <div class="flex gap-2 mt-3">
+    <a href="<%= channel.id ? '/channels/' + channel.id + '/vlc.m3u' : '/vlc-direct.m3u?id=' + channel.acestream_id + '&name=' + encodeURIComponent(channel.name) %>"
+       class="flex-1 text-center rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm font-medium">
+      <%= t('watch.open_vlc') %>
+    </a>
+    <a href="acestream://<%= channel.acestream_id %>"
+       class="flex-1 text-center rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm font-medium">
+      <%= t('watch.open_aceplayer') %>
+    </a>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
@@ -83,6 +94,8 @@
 
     function destroyPlayer() {
       destroyToken += 1; // qualunque callback async legata al player precedente si autoriconosce "stale"
+      var infoEl = document.getElementById('stream-info');
+      if (infoEl) { infoEl.classList.add('hidden'); infoEl.innerHTML = ''; }
       var p = player;
       player = null;
       if (p) {
@@ -164,6 +177,54 @@
       player = mpegts.createPlayer(config);
       player.attachMediaElement(video);
       player.load();
+
+      // Info tecniche del flusso, mostrate solo se l'API le fornisce
+      // davvero — mpegts.js documenta questi due eventi ma non elenca
+      // ufficialmente ogni campo dei rispettivi oggetti, quindi
+      // controlliamo l'esistenza di ognuno prima di mostrarlo invece di
+      // assumerne la presenza.
+      var streamInfoEl = document.getElementById('stream-info');
+      var lastMediaInfo = null;
+      function renderStreamInfo() {
+        if (myToken !== destroyToken) return;
+        var mi = lastMediaInfo;
+        if (!mi) return;
+        var rows = [];
+        if (mi.videoCodec) rows.push([<%- JSON.stringify(t('watch.info_video_codec')) %>, mi.videoCodec]);
+        if (mi.width && mi.height) rows.push([<%- JSON.stringify(t('watch.info_resolution')) %>, mi.width + '×' + mi.height]);
+        if (mi.fps) rows.push([<%- JSON.stringify(t('watch.info_fps')) %>, Math.round(mi.fps * 10) / 10 + ' fps']);
+        if (mi.videoDataRate) rows.push([<%- JSON.stringify(t('watch.info_video_bitrate')) %>, Math.round(mi.videoDataRate) + ' kbps']);
+        if (mi.audioCodec) rows.push([<%- JSON.stringify(t('watch.info_audio_codec')) %>, mi.audioCodec]);
+        if (mi.audioSampleRate) rows.push([<%- JSON.stringify(t('watch.info_audio_rate')) %>, mi.audioSampleRate + ' Hz']);
+        if (mi.audioChannelCount) rows.push([<%- JSON.stringify(t('watch.info_audio_channels')) %>, mi.audioChannelCount]);
+        if (mi.audioDataRate) rows.push([<%- JSON.stringify(t('watch.info_audio_bitrate')) %>, Math.round(mi.audioDataRate) + ' kbps']);
+        if (!rows.length) return;
+        streamInfoEl.innerHTML = rows.map(function (r) {
+          return '<div><span class="text-slate-600">' + r[0] + ':</span> <span class="text-slate-300">' + r[1] + '</span></div>';
+        }).join('');
+        streamInfoEl.classList.remove('hidden');
+      }
+      player.on(mpegts.Events.MEDIA_INFO, function (mi) {
+        if (myToken !== destroyToken) return;
+        lastMediaInfo = mi;
+        renderStreamInfo();
+      });
+      // "Velocità" (throughput di rete reale) cambia nel tempo, quindi va
+      // ri-renderizzata ad ogni evento invece che una volta sola come i
+      // dati del codec — che restano fissi per tutta la sessione.
+      player.on(mpegts.Events.STATISTICS_INFO, function (si) {
+        if (myToken !== destroyToken || !si) return;
+        var el = document.getElementById('stream-info-speed');
+        var label = <%- JSON.stringify(t('watch.info_speed')) %>;
+        var text = typeof si.speed === 'number' ? Math.round(si.speed) + ' KB/s' : null;
+        if (!text) return;
+        if (!el) {
+          streamInfoEl.insertAdjacentHTML('beforeend', '<div id="stream-info-speed"><span class="text-slate-600">' + label + ':</span> <span class="text-slate-300"></span></div>');
+          el = document.getElementById('stream-info-speed');
+        }
+        el.querySelector('span:last-child').textContent = text;
+        streamInfoEl.classList.remove('hidden');
+      });
       player.on(mpegts.Events.ERROR, function (type, detail) {
         if (myToken !== destroyToken) return; // player già sostituito, ignora
         if (finished || handlingError) return;

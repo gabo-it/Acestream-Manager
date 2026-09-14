@@ -25,12 +25,30 @@ function pipeUpstream(upstream, res) {
   // in crash l'intero processo Node — non solo questa richiesta. Con retry
   // ravvicinati lato client (player web), più richieste sovrapposte
   // aumentano la probabilità che questo capiti.
+  //
+  // Una disconnessione client (tab chiusa, player che passa a un altro
+  // canale) è normale amministrazione, non un problema — la logghiamo
+  // solo su console (visibile in "docker compose logs" per debug) senza
+  // farla comparire nel widget "Recent issues" della Dashboard, che
+  // altrimenti si riempirebbe di rumore non azionabile. Solo un errore
+  // davvero inatteso finisce lì.
+  function isBenignDisconnect(err) {
+    return err.name === 'AbortError' || /aborted|ECONNRESET|EPIPE/i.test(err.message || '');
+  }
   nodeStream.on('error', (err) => {
-    console.error('[stream-proxy] error piping stream:', err.message);
+    if (isBenignDisconnect(err)) {
+      console.log('[stream-proxy] client disconnected:', err.message);
+    } else {
+      console.error('[stream-proxy] error piping stream:', err.message);
+    }
     if (!res.writableEnded) res.end();
   });
   res.on('error', (err) => {
-    console.error('[stream-proxy] response error:', err.message);
+    if (isBenignDisconnect(err)) {
+      console.log('[stream-proxy] client disconnected:', err.message);
+    } else {
+      console.error('[stream-proxy] response error:', err.message);
+    }
     nodeStream.destroy();
   });
   nodeStream.pipe(res);
