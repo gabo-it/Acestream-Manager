@@ -31,6 +31,7 @@ const QRCode = require('qrcode');
 const { getStats, stopSession, getStatsEngineUrl, setStatsEngineUrl, isUsingDefaultEngine } = require('./statsProxy');
 const { proxyTs, proxyHlsManifest, proxyHlsPassthrough } = require('./streamProxy');
 const { remuxToFmp4 } = require('./remux');
+const { probeStreams } = require('./streamProbe');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -81,7 +82,7 @@ function render(res, view, locals = {}) {
 // (senza filtro testo) e filtriamo DOPO in JS, invece di scrivere una
 // sottoquery SQL con condizioni temporali per "now"/"next": più semplice
 // da leggere, e riusa la stessa funzione getNowNext già usata altrove.
-function getChannelsWithNowNext(searchQuery, filter) {
+function getChannelsWithNowNext(searchQuery, filter, guide) {
   let channels;
   if (filter === 'without_epg') {
     channels = db
@@ -133,26 +134,90 @@ function getChannelsWithNowNext(searchQuery, filter) {
     }
   }
 
+  const guideMatches = {};
   if (searchQuery) {
     const needle = searchQuery.toLowerCase();
+
+    // Ricerca nel palinsesto dell'intera giornata (opzionale): cerca la
+    // parola nel titolo (originale e tradotto) e nella descrizione di
+    // OGNI programma della giornata, non solo di now/next. La giornata è
+    // quella indicata dal browser (mezzanotte locale dell'utente): solo il
+    // browser conosce il vero fuso orario, il container gira in UTC.
+    const matchesByTvgId = {};
+    if (guide && Number.isFinite(guide.dayStart)) {
+      const dayEnd = guide.dayStart + 24 * 60 * 60 * 1000;
+      const wanted = new Set(channels.map((c) => c.tvg_id).filter(Boolean));
+      if (wanted.size) {
+        const rows = db
+          .prepare(
+            'SELECT tvg_id, title, description, start_ts, stop_ts FROM programs WHERE start_ts < ? AND stop_ts > ? ORDER BY start_ts'
+          )
+          .all(dayEnd, guide.dayStart)
+          .filter((r) => wanted.has(r.tvg_id));
+
+        // Stessa regola di traduzione di now/next: solo dalla cache, mai
+        // chiamate di rete — la ricerca confronta anche il titolo che
+        // l'utente vede davvero (tradotto, se la traduzione è attiva).
+        const translatedByTitle = new Map();
+        if (epgLanguage && getSetting('epg_translate_ui', '1') === '1') {
+          const titles = [...new Set(rows.map((r) => r.title))];
+          const translated = getCachedTranslations(titles, epgLanguage);
+          titles.forEach((t, i) => translatedByTitle.set(t, translated[i]));
+        }
+
+        for (const r of rows) {
+          const shownTitle = translatedByTitle.get(r.title) || r.title;
+          const haystack = `${r.title}\n${shownTitle}\n${r.description || ''}`.toLowerCase();
+          if (haystack.includes(needle)) {
+            (matchesByTvgId[r.tvg_id] = matchesByTvgId[r.tvg_id] || []).push({
+              title: shownTitle,
+              start_ts: r.start_ts,
+              stop_ts: r.stop_ts,
+            });
+          }
+        }
+      }
+    }
+
     channels = channels.filter((ch) => {
       const epg = epgByChannel[ch.id];
       return (
         ch.name.toLowerCase().includes(needle) ||
         (ch.category || '').toLowerCase().includes(needle) ||
         (epg.now && epg.now.title.toLowerCase().includes(needle)) ||
-        (epg.next && epg.next.title.toLowerCase().includes(needle))
+        (epg.next && epg.next.title.toLowerCase().includes(needle)) ||
+        Boolean(ch.tvg_id && matchesByTvgId[ch.tvg_id])
       );
     });
+    for (const ch of channels) {
+      if (ch.tvg_id && matchesByTvgId[ch.tvg_id]) guideMatches[ch.id] = matchesByTvgId[ch.tvg_id];
+    }
   }
 
-  return { channels, epgByChannel, tvgIdCounts };
+  return { channels, epgByChannel, tvgIdCounts, guideMatches };
+}
+
+// Inizio giornata da usare per la ricerca nel palinsesto: il browser invia
+// la propria mezzanotte locale (parametro "ds", epoch ms). Se manca o è
+// palesemente fuori range, ripieghiamo sulla mezzanotte del fuso del
+// container (impostabile con TZ).
+function resolveGuideDayStart(rawDs) {
+  const ds = parseInt(rawDs, 10);
+  if (Number.isFinite(ds) && Math.abs(ds - Date.now()) < 3 * 24 * 60 * 60 * 1000) return ds;
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 
 app.get('/channels', async (req, res) => {
   const q = (req.query.q || '').trim();
   const filter = req.query.filter === 'without_epg' ? 'without_epg' : '';
-  const { channels, epgByChannel, tvgIdCounts } = getChannelsWithNowNext(q, filter);
+  const guideOn = req.query.guide === '1' && q !== '';
+  const { channels, epgByChannel, tvgIdCounts, guideMatches } = getChannelsWithNowNext(
+    q,
+    filter,
+    guideOn ? { dayStart: resolveGuideDayStart(req.query.ds) } : null
+  );
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
   render(res, 'index', {
     titleKey: 'channels.title',
@@ -161,6 +226,8 @@ app.get('/channels', async (req, res) => {
     tvgIdCounts,
     q,
     filter,
+    guideOn,
+    guideMatches,
     acexyBaseUrl,
     checkMode: getSetting('channels_check_mode', 'off'),
     checkIntervalHours: getSetting('channels_check_interval_hours', '6'),
@@ -301,8 +368,21 @@ app.get('/', (req, res) => {
 // completa + invio a dispositivi VLC configurati in Add-Ons.
 app.get('/tv', (req, res) => {
   const q = (req.query.q || '').trim();
-  const { channels, epgByChannel } = getChannelsWithNowNext(q);
-  render(res, 'tv', { titleKey: 'tv.title', channels, epgByChannel, q, vlcDevices: listVlcDevices() });
+  const guideOn = req.query.guide === '1' && q !== '';
+  const { channels, epgByChannel, guideMatches } = getChannelsWithNowNext(
+    q,
+    '',
+    guideOn ? { dayStart: resolveGuideDayStart(req.query.ds) } : null
+  );
+  render(res, 'tv', {
+    titleKey: 'tv.title',
+    channels,
+    epgByChannel,
+    q,
+    guideOn,
+    guideMatches,
+    vlcDevices: listVlcDevices(),
+  });
 });
 
 // Invia lo stream di un canale (via M3U/TS, stesso URL usato da VLC/AcePlayer
@@ -586,10 +666,28 @@ app.get('/stream-proxy/hls/:id/*', proxyHlsPassthrough);
 // il client si disconnette, altrimenti resta a girare a vuoto.
 app.get('/stream-proxy/fmp4/:id', (req, res) => {
   if (!/^[a-fA-F0-9]{40}$/.test(req.params.id)) return res.status(400).end();
-  const ffmpeg = remuxToFmp4(req.params.id, res);
+  // "a" / "v": traccia audio / video scelta dall'utente (indice per tipo)
+  // dopo aver ispezionato il flusso — assenti = scelta automatica.
+  const audio = req.query.a !== undefined ? parseInt(req.query.a, 10) : undefined;
+  const video = req.query.v !== undefined ? parseInt(req.query.v, 10) : undefined;
+  const ffmpeg = remuxToFmp4(req.params.id, res, { audio, video });
   req.on('close', () => {
     if (!ffmpeg.killed) ffmpeg.kill('SIGKILL');
   });
+});
+
+// Elenco delle tracce video/audio/sottotitoli presenti nel flusso, per la
+// scelta nella finestra di riproduzione. Un errore qui (es. il canale non
+// risponde in questo momento) viene restituito alla pagina, non loggato
+// come errore del server: non è un problema della webui.
+app.get('/stream-proxy/tracks/:id', async (req, res) => {
+  if (!/^[a-fA-F0-9]{40}$/.test(req.params.id)) return res.status(400).json({ ok: false, error: 'invalid id' });
+  try {
+    const tracks = await probeStreams(req.params.id);
+    res.json({ ok: true, ...tracks });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
 
 // ---------- Sorgenti (scraping ricorrente) ----------
