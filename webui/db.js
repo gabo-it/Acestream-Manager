@@ -88,6 +88,12 @@ CREATE TABLE IF NOT EXISTS job_runs (
 CREATE INDEX IF NOT EXISTS idx_job_runs_time ON job_runs (started_at DESC);
 `);
 
+// v3.8.0 introduceva la tabella search_sites (pagina "Search sites",
+// rimossa in v3.9.0 perché troppo complicata): chi l'aveva provata trova
+// qui la pulizia automatica, le installazioni che non l'hanno mai avuta
+// non notano nulla.
+db.exec('DROP TABLE IF EXISTS search_sites');
+
 // --- Migrazione automatica per database creati con schemi precedenti ---
 // (CREATE TABLE IF NOT EXISTS non aggiunge colonne a tabelle già esistenti)
 function ensureColumn(table, column, definition) {
