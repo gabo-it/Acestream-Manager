@@ -156,7 +156,6 @@ The main repository has the full README covering configuration, troubleshooting,
 - Reachability/version indicators next to each engine URL in Settings, config export/import
 - Favorites (star channels, favorites-only filter), a "Continue watching" row on the Dashboard, and one-click failover to alternate channels of the same TV channel when playback fails
 - Football match pages flag broadcasters you already carry in your playlist ("In your playlist" watch links), plus a followed-team matches widget on the Dashboard
-- "Find channels for this match" queries your own configured search sites (any page with acestream:// links, ZeroNet zites included) and optionally the AceStream catalog, in parallel, with per-site WARP routing and one-click import
 - Installable as a PWA (home-screen icon, offline shell), light/dark theme toggle, optional "Update available" badge checking GitHub releases (can be turned off in Settings)
 - Health page: background-job history (EPG refresh, channel checks, source refreshes, football index) and per-channel uptime % — the watch-page failover prefers the most reliable alternate
 - Football match pages can search the AceStream catalog with the two team names and bulk-import the streams found in one click

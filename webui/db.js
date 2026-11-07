@@ -86,22 +86,7 @@ CREATE TABLE IF NOT EXISTS job_runs (
   duration_ms INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_job_runs_time ON job_runs (started_at DESC);
-
--- Siti esterni dove cercare stream (pagina "Search sites", usati da
--- "Find channels for this match"): per ognuno un template URL col
--- segnaposto {query}, se passare per il proxy WARP, e on/off. La riga
--- con is_builtin='acestream-catalog' è la ricerca del motore AceStream:
--- stessa interfaccia delle altre, ma non eliminabile.
-CREATE TABLE IF NOT EXISTS search_sites (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  url_template TEXT NOT NULL DEFAULT '',
-  use_warp INTEGER DEFAULT 0,
-  enabled INTEGER DEFAULT 1,
-  is_builtin TEXT NOT NULL DEFAULT '',
-  sort_order INTEGER DEFAULT 0,
-  created_at TEXT DEFAULT (datetime('now'))
-);`);
+`);
 
 // --- Migrazione automatica per database creati con schemi precedenti ---
 // (CREATE TABLE IF NOT EXISTS non aggiunge colonne a tabelle già esistenti)
@@ -280,63 +265,6 @@ function setSetting(key, value) {
   ).run(key, value);
 }
 
-// ---------- Siti di ricerca stream ----------
-
-// Al primo avvio (tabella vuota) semina la fonte integrata: la ricerca
-// del catalogo AceStream via engine. Così anche l'utente storico la vede
-// (e può disattivarla) insieme ai siti che aggiungerà, in un'unica lista.
-if (!db.prepare('SELECT COUNT(*) AS c FROM search_sites').get().c) {
-  db.prepare(
-    `INSERT INTO search_sites (name, url_template, use_warp, enabled, is_builtin, sort_order)
-     VALUES ('AceStream catalog', '', 0, 1, 'acestream-catalog', 0)`
-  ).run();
-}
-
-function getSearchSites() {
-  return db
-    .prepare('SELECT * FROM search_sites ORDER BY sort_order, id')
-    .all();
-}
-
-function getEnabledSearchSites() {
-  return db
-    .prepare('SELECT * FROM search_sites WHERE enabled = 1 ORDER BY sort_order, id')
-    .all();
-}
-
-function getSearchSite(id) {
-  return db.prepare('SELECT * FROM search_sites WHERE id = ?').get(id);
-}
-
-function addSearchSite({ name, urlTemplate, useWarp }) {
-  const max = db.prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM search_sites').get().m;
-  const info = db
-    .prepare(
-      `INSERT INTO search_sites (name, url_template, use_warp, enabled, sort_order)
-       VALUES (?, ?, ?, 1, ?)`
-    )
-    .run(name, urlTemplate, useWarp ? 1 : 0, max + 1);
-  return info.lastInsertRowid;
-}
-
-function updateSearchSite(id, { enabled, useWarp }) {
-  const site = getSearchSite(id);
-  if (!site) return false;
-  db.prepare('UPDATE search_sites SET enabled = ?, use_warp = ? WHERE id = ?').run(
-    enabled === undefined ? site.enabled : enabled ? 1 : 0,
-    useWarp === undefined ? site.use_warp : useWarp ? 1 : 0,
-    id
-  );
-  return true;
-}
-
-function deleteSearchSite(id) {
-  const site = getSearchSite(id);
-  if (!site || site.is_builtin) return false;
-  db.prepare('DELETE FROM search_sites WHERE id = ?').run(id);
-  return true;
-}
-
 module.exports = {
   db,
   getSetting,
@@ -351,10 +279,4 @@ module.exports = {
   recordJobRun,
   runJob,
   getJobRuns,
-  getSearchSites,
-  getEnabledSearchSites,
-  getSearchSite,
-  addSearchSite,
-  updateSearchSite,
-  deleteSearchSite,
 };
