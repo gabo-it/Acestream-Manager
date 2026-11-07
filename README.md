@@ -30,7 +30,7 @@ Donations don't fund further development — this project is maintained regardle
 <tr>
 <td align="center"><b>Channels</b><br><a href="images/search.png"><img src="images/channels.png" width="200"></a></td>
 <td align="center"><b>Search</b><br><a href="images/channels.png"><img src="images/search.png" width="200"></a></td>
-<td align="center"><b>Statistics</b><br><a href="images/sources1.png"><img src="images/statistics.png" width="200"></a></td>
+<td align="center"><b>Channel Stats</b><br><a href="images/sources1.png"><img src="images/statistics.png" width="200"></a></td>
 </tr>
 </table>
 
@@ -43,12 +43,12 @@ Donations don't fund further development — this project is maintained regardle
 
 - **🏠 Dashboard** — stack overview at a glance, programs starting in the next 2 hours, your team's upcoming matches, "Continue watching"
 - **📡 Live TV** — what's on now/next for every channel, built-in web player, one-click cast to VLC, search across today's full schedule, favorites
-- **📺 Channels** — import from URL/M3U/file with per-source auto-refresh, bulk manage, online/offline checks, smart tvg-id/EPG matching even across alphabets, audio/video track selection, automatic failover to alternate streams, one-click repair of unplayable legacy IDs
+- **📺 Channels** — import from URL/M3U/file with per-source auto-refresh, bulk manage, online/offline checks, smart tvg-id/EPG matching even across alphabets (one channel at a time, or in bulk with a preview of every proposed mapping and manual fix before anything is saved), audio/video track selection, automatic failover to alternate streams
 - **🔍 Search** — AceStream catalog search with category filters and one-click bulk import; paste an `acestream://` link or bare ID to play/add that stream directly; catalog infohashes are resolved to Content IDs before playing or importing, so streams found via search actually play
 - **📃 Playlist** — MPEG-TS and HLS links plus combined EPG export (advertised in the M3U header as url-tvg, so players pick the guide up automatically), per-source EPG stats, optional program-title translation
+- **📊 Channel Stats** — live peers/speed for any stream and the streams currently playing through this UI
 - **🔌 Add-Ons** — VLC remote control, Jellyfin library refresh and Live TV tuner URLs, LAN scanner, optional Cloudflare WARP check
 - **⚽ Football** *(experimental)* — team search, match schedules with kickoff times, broadcasters cross-checked with your playlist ("In your playlist") and one-click import of missing streams
-- **📊 Statistics** — live peers/speed for any stream and the streams currently playing through this UI
 - **🩺 Health** — background-job history and per-channel reliability (uptime % over the last 60 checks); failover tries the most reliable stream first
 - **🌍 Extras** — config export/import, PWA, light/dark theme, optional update badge, weekly engine rebuilds
 
@@ -419,7 +419,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.11.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.12.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

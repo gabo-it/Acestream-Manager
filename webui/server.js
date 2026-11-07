@@ -705,6 +705,75 @@ app.post('/channels/:id/logo', (req, res) => {
   res.json({ ok: true, logoUrl, changes });
 });
 
+// ---------- Matching in blocco canali ↔ EPG ----------
+
+// Calcola i candidati tvg-id (dall'EPG importato) per i canali indicati,
+// SENZA toccare il DB: il client chiama qui a piccoli batch (una pagina
+// con molti canali altrimenti terrebbe la richiesta aperta per minuti),
+// mostra la preview e solo dopo la conferma dell'utente chiama /apply.
+// Body: { ids: [..] } — una sotto-lista (canali selezionati) o un batch
+// di tutti quelli visibili; la lista dei canali da processare la decide
+// il client, qui si risponde solo per gli id che esistono davvero.
+app.post('/channels/epg-match', async (req, res) => {
+  const rawIds = Array.isArray(req.body && req.body.ids) ? req.body.ids : [];
+  const ids = [...new Set(rawIds.map((x) => parseInt(x, 10)).filter(Number.isFinite))];
+  if (ids.length === 0) return res.json({ results: [] });
+
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db
+    .prepare(`SELECT id, name, tvg_id FROM channels WHERE id IN (${placeholders}) ORDER BY name`)
+    .all(...ids);
+
+  const results = [];
+  for (const ch of rows) {
+    let suggestions = [];
+    try {
+      suggestions = await suggestTvgIds(ch.name, 5);
+    } catch (err) {
+      console.error(`[epg-match] suggestions failed for "${ch.name}":`, err.message);
+    }
+    results.push({
+      id: ch.id,
+      name: ch.name,
+      currentTvgId: ch.tvg_id || '',
+      suggestions,
+    });
+  }
+  res.json({ results });
+});
+
+// Applica le associazioni confermate nella preview. Body:
+// { assignments: [{ id, tvgId, logoUrl }] } — tvgId vuoto = scollega il
+// canale dall'EPG; logoUrl vuoto o non http(s) = lascia il logo attuale
+// (stessa regola di POST /channels/:id/tvg-id).
+app.post('/channels/epg-match/apply', (req, res) => {
+  const assignments = Array.isArray(req.body && req.body.assignments) ? req.body.assignments : [];
+  let applied = 0;
+
+  const applyAll = db.transaction((items) => {
+    for (const a of items) {
+      const id = parseInt(a && a.id, 10);
+      if (!Number.isFinite(id)) continue;
+      const tvgId = String(a.tvgId || '').trim().slice(0, 200);
+      let logoUrl = String(a.logoUrl || '').trim();
+      if (logoUrl && !/^https?:\/\//i.test(logoUrl)) logoUrl = '';
+      // Conta solo gli update che hanno davvero toccato una riga: un id
+      // arrivato dalla preview ma intanto cancellato non è "applicato".
+      let result;
+      if (logoUrl) {
+        result = db.prepare('UPDATE channels SET tvg_id = ?, logo_url = ? WHERE id = ?').run(tvgId, logoUrl, id);
+      } else {
+        result = db.prepare('UPDATE channels SET tvg_id = ? WHERE id = ?').run(tvgId, id);
+      }
+      if (result.changes > 0) applied += 1;
+    }
+  });
+  applyAll(assignments);
+
+  console.log(`[epg-match] applicate ${applied} associazioni su ${assignments.length} proposte`);
+  res.json({ applied });
+});
+
 // Player web integrato (mpegts.js via MSE): evita che il browser scarichi
 // il flusso invece di riprodurlo, attraverso un proxy same-origin (vedi
 // streamProxy.js) perché acexy non manda header CORS e le richieste
@@ -1143,43 +1212,6 @@ app.post('/search/import-selected', async (req, res) => {
   });
   if (rows.length) importChannels(rows, null);
   res.json({ imported: rows.length, failed });
-});
-
-// Riparazione dei canali importati dal catalogo PRIMA della v3.11.0: lì
-// l'infohash finiva nel DB come se fosse un content id, e quei canali non
-// partivano mai. Si riprova solo sui canali NON online (uno stream che
-// va online col suo id è chiaramente già corretto); per ciascuno si
-// chiede all'engine il content id e, se risponde con uno diverso, si
-// sostituisce. L'engine risponde con errore per i veri content id (non
-// sono infohash noti): finiscono in "failed" e non vengono toccati.
-app.post('/channels/repair-infohash', async (req, res) => {
-  const rows = db.prepare("SELECT id, acestream_id FROM channels WHERE status != 'online'").all();
-  let repaired = 0;
-  let unchanged = 0;
-  let failed = 0;
-  for (const ch of rows) {
-    try {
-      const cid = await resolveContentId(ch.acestream_id);
-      if (!cid || cid === ch.acestream_id) {
-        unchanged += 1;
-        continue;
-      }
-      // Un altro canale ha già questo content id? È un duplicato che
-      // punta alla stessa stream già corretta: non si tocca (il valore
-      // corretto c'è già, e cancellarlo di nascosto non è compito della
-      // riparazione — resta il bulk-delete per i duplicati veri e propri).
-      const dup = db.prepare('SELECT id FROM channels WHERE acestream_id = ? AND id != ?').get(cid, ch.id);
-      if (dup) {
-        unchanged += 1;
-        continue;
-      }
-      db.prepare('UPDATE channels SET acestream_id = ? WHERE id = ?').run(cid, ch.id);
-      repaired += 1;
-    } catch {
-      failed += 1;
-    }
-  }
-  res.json({ checked: rows.length, repaired, unchanged, failed });
 });
 
 // ---------- Statistiche stream ----------
