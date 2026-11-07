@@ -136,7 +136,6 @@ async function searchTeams(query) {
 async function getBroadcastersByCountry(matchUrl) {
   const html = await fetchHtml(matchUrl);
   const $ = cheerio.load(html);
-
   const results = [];
 
   let table = null;
@@ -173,7 +172,10 @@ async function getBroadcastersByCountry(matchUrl) {
     });
   }
 
-  return results;
+  // Il titolo lo si recupera dallo stesso HTML: chi arriva dalla pagina
+  // partita lo trova già nel link (parametro teams) senza un secondo
+  // scaricamento, ma passarlo qui costa nulla e tiene insieme i dati.
+  return { coverage: results, matchTitle: extractMatchTitle($) };
 }
 
 // Estrae {country, slug} da un URL di pagina squadra livesoccertv.com
@@ -186,20 +188,27 @@ function parseTeamUrl(url) {
   return { country: m[1], slug: m[2] };
 }
 
-// Titolo della partita ("Atalanta vs Internazionale") dalla sua pagina:
-// serve alla ricerca canali per partita per costruire le query. Lo si
-// prende dall'heading principale della pagina (il <title> del sito porta
-// dietro pubblicità/suffissi del tipo "... - Livesoccertv"); se non ha la
-// forma attesa si ripiega sul <title>. Restituisce '' se il fetch fallisce:
-// il chiamate ha già un suo messaggio d'errore da mostrare.
-async function getMatchTitle(matchUrl) {
-  const html = await fetchHtml(matchUrl);
-  const $ = cheerio.load(html);
+// Titolo della partita ("Atalanta vs Internazionale") da un HTML della
+// pagina match già caricato in cheerio: si guarda all'heading principale
+// (il <title> del sito porta dietro pubblicità/suffissi del tipo
+// "... - Livesoccertv"); se non ha la forma attesa si ripiega sul <title>.
+// Restituisce '' se non riconoscibile: il chiamante ha il suo messaggio
+// d'errore da mostrare.
+function extractMatchTitle($) {
   const h1 = ($('h1').first().text() || '').replace(/\s+/g, ' ').trim();
   if (/[a-zA-Z\u00C0-\u024F]{2}\s+vs\.?\s+[a-zA-Z\u00C0-\u024F]{2}/i.test(h1)) return h1;
   const title = ($('title').first().text() || '').replace(/\s+/g, ' ').trim();
   const m = title.match(/([^|\-–—]*?\s+vs\.?\s+[^|\-–—]*?)(?:\s*[|\-–—]|$)/i);
   return m ? m[1].trim() : (h1 || title).slice(0, 120);
+}
+
+// Variante "solo titolo": scarica la pagina e nient'altro. Ora è solo il
+// ripiego per i link alla pagina canali-per-partita aperti a mano senza
+// il parametro teams — i link interni lo passano già, così lì non serve
+// nessun secondo scaricamento della pagina match.
+async function getMatchTitle(matchUrl) {
+  const html = await fetchHtml(matchUrl);
+  return extractMatchTitle(cheerio.load(html));
 }
 
 // --- parsing della lista partite di una squadra ------------------------------

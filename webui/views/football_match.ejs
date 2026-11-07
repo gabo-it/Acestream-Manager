@@ -6,7 +6,10 @@
 
 <% if (matchUrl) { %>
   <div class="mb-6">
-    <a href="/football/match/channels?url=<%= encodeURIComponent(matchUrl) %>"
+    <!-- teams= evita un secondo scaricamento della pagina match lato
+         server: il titolo è già noto qui (estratto dallo stesso HTML
+         delle emittenti). Se vuoto, la pagina canali ripiega sullo scrape. -->
+    <a href="/football/match/channels?url=<%= encodeURIComponent(matchUrl) %>&teams=<%= encodeURIComponent(matchTitle || '') %>"
        class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
       🔎 <%= t('football.find_channels') %>
     </a>

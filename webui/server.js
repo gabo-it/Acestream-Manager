@@ -764,7 +764,11 @@ app.get('/watch-direct', (req, res) => {
   const name = (req.query.name || 'Stream').trim();
   if (!/^[a-fA-F0-9]{40}$/.test(acestreamId)) return res.status(400).send(reqT()('errors.invalid_acestream_id'));
   const { tsUrl, tsProxyUrl } = buildStreamUrls(req, acestreamId);
-  render(res, 'watch', { title: name, channel: { id: null, name, acestream_id: acestreamId }, streamUrl: tsUrl, tsProxyUrl });
+  // alternates: [] serve — il template watch.ejs fa riferimento alla
+  // variabile e con EJS un local mai passato è un ReferenceError, non
+  // semplicemente undefined (era la causa del 500 "Rendering error" su
+  // ogni apertura da Cerca / canali per partita).
+  render(res, 'watch', { title: name, channel: { id: null, name, acestream_id: acestreamId }, streamUrl: tsUrl, tsProxyUrl, alternates: [] });
 });
 
 // Il pulsante "VLC" NON usa più lo schema vlc:// (VLC non lo registra come
@@ -1429,12 +1433,13 @@ function matchChannelsToBroadcaster(broadcaster, channels) {
 app.get('/football/match', async (req, res) => {
   const matchUrl = (req.query.url || '').trim();
   let coverage = [];
+  let matchTitle = '';
   let error = null;
   if (!matchUrl) {
     error = 'URL mancante';
   } else {
     try {
-      coverage = await getBroadcastersByCountry(matchUrl);
+      ({ coverage, matchTitle } = await getBroadcastersByCountry(matchUrl));
     } catch (err) {
       error = err.message;
     }
@@ -1458,7 +1463,7 @@ app.get('/football/match', async (req, res) => {
       return { ...row, matches: [...byId.values()] };
     });
   }
-  render(res, 'football_match', { titleKey: 'football.broadcasters_title', matchUrl, coverage: coverageWithMatches, error });
+  render(res, 'football_match', { titleKey: 'football.broadcasters_title', matchUrl, matchTitle, coverage: coverageWithMatches, error });
 });
 
 // Ricerca canali per una partita: usa il titolo ("A vs B") per interrogare
@@ -1495,15 +1500,17 @@ app.get('/football/match/channels', async (req, res) => {
   }
   queries.splice(3);
 
+  // Le query partono in parallelo: in sequenza tre ricerche da ~10 s di
+  // timeout ciascuna rendevano la pagina lentissima (e il motore cerca
+  // già abbastanza piano da solo).
+  const settled = await Promise.allSettled(
+    queries.map((q) => searchAceStream(q, { pageSize: 20 }))
+  );
   let results = [];
   let failedQueries = 0;
-  for (const q of queries) {
-    try {
-      const data = await searchAceStream(q, { pageSize: 20 });
-      results.push(...data.results.map((r) => ({ ...r, query: q })));
-    } catch (err) {
-      failedQueries += 1;
-    }
+  for (const s of settled) {
+    if (s.status === 'fulfilled') results.push(...s.value.results);
+    else failedQueries += 1;
   }
 
   // Dedup per infohash (la stessa stream emerge da più query) e ranking:
@@ -1511,15 +1518,27 @@ app.get('/football/match/channels', async (req, res) => {
   const seen = new Map();
   for (const r of results) {
     if (!r.infohash) continue;
-    const prev = seen.get(r.infohash);
-    if (!prev) seen.set(r.infohash, r);
+    if (!seen.has(r.infohash)) seen.set(r.infohash, r);
   }
-  const tokens = vsParts.map((t) => t.toLowerCase().slice(0, 6));
-  const merged = [...seen.values()].map((r) => ({
-    ...r,
-    relevant: tokens.some((tk) => (r.name || '').toLowerCase().includes(tk)),
-  }));
-  merged.sort((a, b) => Number(b.relevant) - Number(a.relevant) || (b.status === 2) - (a.status === 2));
+  const teamTokens = vsParts.map((t) => t.toLowerCase()).filter(Boolean);
+  // Confronto a livello di parola con prefisso bidirezionale (minimo 4
+  // caratteri): i nomi completi di livesoccertv ("Internazionale") devono
+  // trovare anche gli stream che li abbreviano ("Inter HD") — cosa che il
+  // vecchio includes(squadra.slice(0, 6)) mancava, segnando "non
+  // pertinente" proprio gli stream giusti.
+  const isRelevant = (name) => {
+    const words = (name || '').toLowerCase().split(/[^a-z0-9\u00C0-\u024F]+/).filter(Boolean);
+    return words.some((w) =>
+      teamTokens.some((t) => (w.length >= 4 && t.startsWith(w)) || (t.length >= 4 && w.startsWith(t)))
+    );
+  };
+  const merged = [...seen.values()].map((r) => ({ ...r, relevant: isRelevant(r.name) }));
+  merged.sort(
+    (a, b) =>
+      Number(b.relevant) - Number(a.relevant) ||
+      (b.status === 2) - (a.status === 2) ||
+      a.name.localeCompare(b.name)
+  );
 
   if (!queries.length) error = 'no-title';
   else if (failedQueries === queries.length) error = 'search-unavailable';
