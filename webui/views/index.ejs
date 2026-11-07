@@ -109,6 +109,11 @@
               class="rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 transition px-3 py-1.5">
         <%= t('channels.delete_selected') %>
       </button>
+      <button type="button" onclick="repairInfohashIds(this)"
+              title="<%= t('channels.repair_infohash_hint') %>"
+              class="rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition px-3 py-1.5">
+        <%= t('channels.repair_infohash') %>
+      </button>
     </div>
 
     <div class="grid gap-3">
@@ -216,11 +221,38 @@
     manualSearchPlaceholder: <%- JSON.stringify(t('channels.manual_search_placeholder')) %>,
     manualSearchBtn: <%- JSON.stringify(t('channels.manual_search_btn')) %>,
     manualSearchEmpty: <%- JSON.stringify(t('channels.manual_search_empty')) %>,
+    repairConfirm: <%- JSON.stringify(t('channels.repair_infohash_confirm')) %>,
+    repairResult: <%- JSON.stringify(t('channels.repair_infohash_result')) %>,
+    repairBusy: <%- JSON.stringify(t('channels.repair_infohash_busy')) %>,
   };
 
   document.getElementById('select-all')?.addEventListener('change', function () {
     document.querySelectorAll('.channel-checkbox').forEach(function (cb) { cb.checked = this.checked; }.bind(this));
   });
+
+  // Ripara i canali importati dal catalogo quando l'infohash era stato
+  // salvato come content id (bug corretto in v3.11.0): lato server si
+  // prova solo sui canali non online, qui si mostra il riepilogo.
+  function repairInfohashIds(btn) {
+    if (!confirm(i18n.repairConfirm)) return;
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = i18n.repairBusy;
+    fetch('/channels/repair-infohash', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        alert(i18n.repairResult
+          .replace('{checked}', r.checked)
+          .replace('{repaired}', r.repaired)
+          .replace('{failed}', r.failed));
+        window.location.reload();
+      })
+      .catch(function (err) {
+        alert('Errore: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = original;
+      });
+  }
 
   function copyLink(url, btn) {
     copyToClipboard(url).then(function () {
