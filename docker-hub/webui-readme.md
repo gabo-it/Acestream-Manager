@@ -149,7 +149,8 @@ The main repository has the full README covering configuration, troubleshooting,
 - Dashboard (upcoming programs, recently added channels, quick stats) and a Live TV view with now/next info per channel
 - Channel CRUD, bulk import, per-source auto-refresh scheduling
 - EPG import with cross-alphabet tvg-id/logo matching and optional program-title translation (via self-hosted LibreTranslate)
-- AceStream search with bulk import
+- AceStream search with bulk import; paste an acestream:// link or bare ID in the search box to play/add that stream directly
+- M3U export advertises the EPG guide in its header (url-tvg/x-tvg-url): TiviMate, OTT Navigator, Kodi and friends load the guide automatically
 - Search channels by name, by what is on now/next, or by any program scheduled today (title and description); pick the audio/video track to play when a stream carries several
 - Dual playlists (MPEG-TS + HLS), built-in web player, VLC/AcePlayer options
 - Add-Ons: cast to remote VLC instances, active Jellyfin control (test connection, trigger library refresh), a LAN scanner to find both, optional Cloudflare WARP status check

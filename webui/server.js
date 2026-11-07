@@ -1035,12 +1035,25 @@ app.post('/import/m3u-file', upload.single('file'), (req, res) => {
 
 // ---------- Ricerca (API AceStream) ----------
 
+// Un ID incollato direttamente nella ricerca: "acestream://<id>" oppure il
+// bare 40-hex (content ID o infohash — 40 caratteri esadecimali in entrambi
+// i casi, e per il motore la chiamata di riproduzione è la stessa). In quel
+// caso niente ricerca catalogo: si mostra la scheda "stream diretto" con
+// play/import immediati.
+function parseDirectStreamId(raw) {
+  const m = String(raw || '').trim().match(/^(?:acestream:\/\/)?([a-fA-F0-9]{40})$/);
+  return m ? m[1].toLowerCase() : null;
+}
+
 app.get('/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   const category = (req.query.category || '').trim();
+  const directId = parseDirectStreamId(q);
   let results = [];
   let error = null;
-  if (q || category) {
+  if (directId) {
+    // ID esatto: il catalogo non aggiungerebbe nulla di utile.
+  } else if (q || category) {
     try {
       const data = await searchAceStream(q, { category });
       results = data.results;
@@ -1049,7 +1062,7 @@ app.get('/search', async (req, res) => {
     }
   }
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
-  render(res, 'search', { titleKey: 'search.title', q, category, results, error, categories: CATEGORIES, acexyBaseUrl });
+  render(res, 'search', { titleKey: 'search.title', q, category, results, error, categories: CATEGORIES, acexyBaseUrl, directId });
 });
 
 app.post('/search/import', (req, res) => {
@@ -1785,7 +1798,11 @@ app.get('/playlist', async (req, res) => {
 
 app.get('/playlist.m3u8', (req, res) => {
   const format = req.query.format === 'hls' ? 'hls' : 'ts';
-  res.type('application/vnd.apple.mpegurl').send(buildM3U(req.query.search || '', format));
+  // Stessa logica della pagina Playlist (http://<host>/epg.xml): così chi
+  // importa l'M3U in TiviMate/Kodi/OTT Navigator riceve anche la guida,
+  // senza dover configurare l'URL EPG a mano nel player.
+  const epgUrl = `http://${req.get('host')}/epg.xml`;
+  res.type('application/vnd.apple.mpegurl').send(buildM3U(req.query.search || '', format, epgUrl));
 });
 
 app.get('/epg.xml', async (req, res) => {

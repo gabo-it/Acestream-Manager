@@ -8,7 +8,14 @@ const { getTranslationWindowBounds } = require('./epg');
 // dell'engine /ace/manifest.m3u8 — utile per Smart TV/browser che si
 // aspettano un vero manifest HLS; un solo client alla volta per canale,
 // perché in questo caso non passa da acexy).
-function buildM3U(search = '', format = 'ts') {
+//
+// epgUrl (se passato) finisce nell'header come url-tvg + x-tvg-url: i player
+// IPTV (TiviMate, OTT Navigator, Kodi PVR…) caricano così la guida da soli,
+// senza che l'utente debba incollare l'URL dell'EPG a mano nelle loro
+// impostazioni. Sono due attributi per lo stesso URL perché i player non
+// leggono tutti lo stesso (url-tvg è il più diffuso, x-tvg-url quello che
+// si aspettano Kodi e alcuni altri).
+function buildM3U(search = '', format = 'ts', epgUrl = '') {
   const channels = search
     ? db
         .prepare('SELECT * FROM channels WHERE name LIKE ? OR category LIKE ? ORDER BY sort_order, name COLLATE NOCASE')
@@ -28,7 +35,13 @@ function buildM3U(search = '', format = 'ts') {
     buildStreamUrl = (id) => `${baseUrl}/ace/getstream?id=${encodeURIComponent(id)}`;
   }
 
-  let out = '#EXTM3U\n';
+  // L'EPG lo pubblichiamo sempre (l'endpoint /epg.xml esiste comunque e
+  // risponde con un XML valido anche vuoto): un url-tvg verso una guida
+  // senza programmi non disturba i player.
+  const headerAttrs = epgUrl
+    ? ` url-tvg="${epgUrl}" x-tvg-url="${epgUrl}"`
+    : '';
+  let out = `#EXTM3U${headerAttrs}\n`;
   for (const ch of channels) {
     const attrs = [
       ch.tvg_id ? `tvg-id="${ch.tvg_id}"` : '',

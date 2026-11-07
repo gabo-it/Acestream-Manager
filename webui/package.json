@@ -1,6 +1,6 @@
 {
   "name": "acestream-webui",
-  "version": "3.9.0",
+  "version": "3.10.0",
   "description": "Web interface for managing AceStream channels, M3U playlists and EPG",
   "main": "server.js",
   "type": "commonjs",

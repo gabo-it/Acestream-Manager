@@ -15,6 +15,30 @@
   </button>
 </form>
 
+<% if (directId) { %>
+  <div class="rounded-xl border border-indigo-900 bg-indigo-950/30 p-5 mb-6 max-w-2xl">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0"></span>
+      <span class="font-medium"><%= t('search.direct_title') %></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3"><%= t('search.direct_hint') %></p>
+    <div class="text-xs text-slate-500 font-mono break-all mb-4"><%= directId %></div>
+    <div class="flex items-center gap-3 flex-wrap text-xs mb-4">
+      <a href="/watch-direct?id=<%= directId %>" class="text-slate-300 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
+      <a href="/vlc-direct.m3u?id=<%= directId %>" class="text-slate-300 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
+      <a href="acestream://<%= directId %>" class="text-slate-300 hover:text-indigo-400 transition"><%= t('channels.aceplayer') %></a>
+    </div>
+    <form method="POST" action="/search/import" class="flex gap-2 flex-wrap">
+      <input type="hidden" name="infohash" value="<%= directId %>" />
+      <input type="text" name="name" maxlength="200" placeholder="<%= t('search.direct_name_placeholder') %>"
+             class="flex-1 min-w-[180px] rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+      <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
+        <%= t('search.direct_add') %>
+      </button>
+    </form>
+  </div>
+<% } %>
+
 <% if (error) { %>
   <div class="rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm mb-6">
     <%= t('search.failed') %>: <%= error %>
@@ -22,7 +46,7 @@
   </div>
 <% } %>
 
-<% if ((q || category) && !error) { %>
+<% if ((q || category) && !error && !directId) { %>
   <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
     <p class="text-sm text-slate-500"><%= results.length %> <%= t('search.results_for') %> "<%= q || category %>"</p>
     <% if (results.length > 0) { %>

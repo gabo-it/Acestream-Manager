@@ -183,7 +183,7 @@ const STRINGS = {
 
     'search.title': 'Search channels',
     'search.subtitle': "Queries the AceStream engine's built-in search module directly (decentralized Ace Search network).",
-    'search.placeholder': 'Channel name, event, category…',
+    'search.placeholder': 'Channel name, event, acestream:// link…',
     'search.btn': 'Search',
     'search.add': '+ Add',
     'search.import_selected': 'Import selected',
@@ -194,7 +194,10 @@ const STRINGS = {
     'search.results_for': 'results for',
     'search.available': 'Available',
     'search.uncertain': 'Uncertain availability',
-
+    'search.direct_title': 'Direct stream detected',
+    'search.direct_hint': "You pasted an AceStream ID — no catalog search needed. Play it right away, or add it to your channels with the name you prefer (left empty, a name is generated from the ID).",
+    'search.direct_name_placeholder': 'Channel name (optional)',
+    'search.direct_add': '+ Add to channels',
 
     'stats.title': 'Stream statistics',
     'stats.subtitle': 'Real-time statistics (peers, download/upload speed) for a channel.',
@@ -338,7 +341,7 @@ const STRINGS = {
     'playlist.hls_not_configured': 'First configure the public engine URL in',
     'playlist.hls_experimental': "Note: requires the engine's HTTP port to be published on the host (it is by default in this stack) — if you set an access token in ENGINE_FLAGS in the .env file, it's included automatically in the link.",
     'playlist.epg_xml_title': 'EPG guide (XMLTV)',
-    'playlist.epg_xml_desc': 'Combined XMLTV export of all sources below, for IPTV/Smart TV players that accept a program guide URL.',
+    'playlist.epg_xml_desc': 'Combined XMLTV export of all sources below, for IPTV/Smart TV players that accept a program guide URL. It is also advertised automatically inside the M3U header (url-tvg): players like TiviMate, OTT Navigator or Kodi pick the guide up when you add the playlist.',
     'playlist.epg_sources_title': 'EPG sources',
     'playlist.epg_sources_help': 'The program guides (XMLTV) to import schedules from — downloaded and combined automatically based on the interval set below.',
     'playlist.epg_no_sources': 'No EPG sources configured.',
