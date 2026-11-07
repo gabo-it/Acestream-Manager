@@ -35,20 +35,20 @@ Donations don't fund further development — this project is maintained regardle
 </table>
 
 > [!NOTE]
-> These screenshots predate several redesigns (sidebar navigation, Live TV, Dashboard, the Engine tab's removal) — they still show the general idea, but some details no longer match the current UI exactly.
+> These screenshots predate several redesigns (sidebar navigation, Live TV, Dashboard, the Engine tab's removal) — they still show the general idea, but some details no longer match the current UI exactly (recent additions — favorites stars, the light/dark toggle, the new Dashboard widgets — aren't shown).
 
 ---
 
 ## ✨ Features
 
 ### 🏠 Dashboard
-Landing page: channel/EPG-source/VLC-device counts, upcoming programs in the next 2 hours, recently added channels, last EPG refresh status — all clickable through to the relevant section
+Landing page: channel/EPG-source/VLC-device counts, upcoming programs in the next 2 hours, recently added channels, last EPG refresh status — all clickable through to the relevant section · plus two personal rows: upcoming matches of the team you follow and a "Continue watching" strip of recently played channels
 
 ### 📡 Live TV
-One row per channel with what's on now and what's next right alongside it — click a row to open a modal with the web player, full daily schedule, and one-click casting to any configured VLC device · the search box also matches program titles, and an optional "Also search today's full schedule" switch looks for a word in the title and description of every program scheduled today (e.g. "match" lists every channel with a match on today)
+One row per channel with what's on now and what's next right alongside it — click a row to open a modal with the web player, full daily schedule, and one-click casting to any configured VLC device · the search box also matches program titles, and an optional "Also search today's full schedule" switch looks for a word in the title and description of every program scheduled today (e.g. "match" lists every channel with a match on today) · star channels as favorites and flip on a favorites-only filter
 
 ### 📺 Channels
-CRUD, search, bulk select/delete · online/offline status check (single or all at once) · import from URL, pasted M3U, or uploaded file (per-source auto-refresh schedule, with a picker to choose what to import) · link alternate streams to a shared EPG · automatic tvg-id/logo suggestions — even across alphabets (e.g. Cyrillic ↔ Latin), plus a manual EPG search that always works regardless of automatic matching · play via the built-in web player, a one-click `.m3u` download for VLC, an AcePlayer link, or copy the direct link · in the web player, inspect a stream's audio/video tracks and choose which ones to play (e.g. another commentary language), played through a server-side ffmpeg remux
+CRUD, search, bulk select/delete · online/offline status check (single or all at once) · import from URL, pasted M3U, or uploaded file (per-source auto-refresh schedule, with a picker to choose what to import) · link alternate streams to a shared EPG · automatic tvg-id/logo suggestions — even across alphabets (e.g. Cyrillic ↔ Latin), plus a manual EPG search that always works regardless of automatic matching · play via the built-in web player, a one-click `.m3u` download for VLC, an AcePlayer link, or copy the direct link · in the web player, inspect a stream's audio/video tracks and choose which ones to play (e.g. another commentary language), played through a server-side ffmpeg remux · if a stream won't play, the watch page offers the other channels linked to the same EPG entry as one-click failover (online-checked ones first)
 
 ### 🔍 Search
 AceStream's own search API with category filtering — select and bulk-import results with one click, same playback options as regular channels
@@ -60,13 +60,13 @@ MPEG-TS (via acexy, multi-client) and HLS (native engine endpoint) links, plus t
 **VLC**: control remote VLC instances via their native HTTP interface — cast any channel to them with one click from Live TV. **Jellyfin**: active control via its REST API — test the connection and trigger a library refresh directly, plus the M3U/XMLTV URLs for its native Live TV tuner setup. **LAN scanner**: find VLC/Jellyfin candidates on your network by IP range instead of typing addresses by hand (Jellyfin candidates are verified against its public server-info endpoint, not just "something answered this port"). **Cloudflare WARP** *(optional, off by default)*: status check for the webui's own outbound requests — never routes AceStream/acexy traffic
 
 ### ⚽ Football *(experimental)*
-Search a team through a local index built from major league standings, browse matches with kickoff times in your server's timezone, and see broadcasters grouped by country. livesoccertv.com is behind a Cloudflare challenge that blocks plain server-side requests, so the webui transparently falls back to a bundled headless Chromium when needed (details and tunables in `.env.example`)
+Search a team through a local index built from major league standings, browse matches with kickoff times in your server's timezone, and see broadcasters grouped by country — each broadcaster is cross-checked against your playlist, so channels carrying it get an "In your playlist" watch link right on the match page. livesoccertv.com is behind a Cloudflare challenge that blocks plain server-side requests, so the webui transparently falls back to a bundled headless Chromium when needed (details and tunables in `.env.example`)
 
 ### 📊 Statistics
 Live peers/speed for any stream (optionally pointing at a different engine), plus a list of streams currently playing through this web UI
 
 ### 🌍 Everything else
-One-click configuration export/import · weekly engine image rebuilds via GitHub Actions · all AceStream caching kept in RAM
+One-click configuration export/import · installable as a PWA (home-screen icon, offline app shell) · light/dark theme toggle in the sidebar · optional "Update available" badge that checks GitHub releases every 6 hours (toggle in Settings) · weekly engine image rebuilds via GitHub Actions · all AceStream caching kept in RAM
 
 ---
 
@@ -287,7 +287,7 @@ Engine parameters (ports, bandwidth, cache, access token) live in `.env` — edi
 | `ACEXY_CLIENT_EVICTION_TIMEOUT` | `10s` | Raise if brief player hiccups cause visible stutter |
 | `LIBRETRANSLATE_LANGUAGES` | `en,it,ru` | Only relevant with the optional `translate` profile — adjust to your EPG sources' actual languages (each adds ~200MB RAM) |
 
-In the web UI, **Settings** has three separate engine URL fields — each with a live reachability/version indicator next to it: the M3U/TS playlist URL (VLC, AcePlayer — normally acexy), the HTTP playback engine URL used only by the built-in web player (blank = falls back to the M3U URL above; kept separate because the web player's close-together retries need an engine that tolerates overlapping connections, like acexy — pointing it at a plain engine can cause instability even with one viewer), and the public engine URL needed for the HLS playlist to work from other devices. Settings also has configuration export/import. **Sources** is for channel import and channel-source management. **Playlist** has the M3U/HLS/EPG XML links plus EPG configuration (guide URLs — one per line, refresh interval, program-guide translation), since both are about consuming the content the stack produces.
+In the web UI, **Settings** has three separate engine URL fields — each with a live reachability/version indicator next to it: the M3U/TS playlist URL (VLC, AcePlayer — normally acexy), the HTTP playback engine URL used only by the built-in web player (blank = falls back to the M3U URL above; kept separate because the web player's close-together retries need an engine that tolerates overlapping connections, like acexy — pointing it at a plain engine can cause instability even with one viewer), and the public engine URL needed for the HLS playlist to work from other devices. Settings also has configuration export/import and the update-check toggle behind the "Update available" sidebar badge. **Sources** is for channel import and channel-source management. **Playlist** has the M3U/HLS/EPG XML links plus EPG configuration (guide URLs — one per line, refresh interval, program-guide translation), since both are about consuming the content the stack produces.
 
 ---
 
@@ -305,7 +305,7 @@ Set `GITHUB_OWNER=<your-username>` in `.env`, and enable **"Read and write permi
 
 ### About GitHub Releases
 
-Not automatic — this project's CI publishes to GHCR (Packages), not Releases. Create one yourself if you want: `git tag v1.1 && git push --tags`, then GitHub → Releases → "Draft a new release". Entirely optional.
+Not automatic — this project's CI publishes to GHCR (Packages), not Releases. Create one yourself: `git tag v3.6.0 && git push origin v3.6.0`, then GitHub → Releases → "Draft a new release". Since v3.6.0 this is more than cosmetic: the web UI's optional "Update available" badge compares its version against the latest GitHub Release of gabo-it/Acestream-Manager (hard-coded upstream URL — a fork keeps checking the original repo), so a new version only reaches users once its release is drafted on GitHub.
 
 ### Checking for leaked secrets in your git history
 

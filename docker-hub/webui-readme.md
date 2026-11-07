@@ -154,6 +154,9 @@ The main repository has the full README covering configuration, troubleshooting,
 - Dual playlists (MPEG-TS + HLS), built-in web player, VLC/AcePlayer options
 - Add-Ons: cast to remote VLC instances, active Jellyfin control (test connection, trigger library refresh), a LAN scanner to find both, optional Cloudflare WARP status check
 - Reachability/version indicators next to each engine URL in Settings, config export/import
+- Favorites (star channels, favorites-only filter), a "Continue watching" row on the Dashboard, and one-click failover to alternate channels of the same TV channel when playback fails
+- Football match pages flag broadcasters you already carry in your playlist ("In your playlist" watch links), plus a followed-team matches widget on the Dashboard
+- Installable as a PWA (home-screen icon, offline shell), light/dark theme toggle, optional "Update available" badge checking GitHub releases (can be turned off in Settings)
 
 ## 🏷️ Tags
 
