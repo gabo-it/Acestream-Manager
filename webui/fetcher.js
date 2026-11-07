@@ -266,6 +266,63 @@ async function fetchHtml(url, { ttlMs = DEFAULT_TTL_MS, force = false } = {}) {
   throw lastError || new Error('fetch failed');
 }
 
+// --- fetch through SOCKS5 (Cloudflare WARP) ---------------------------------
+// Used by the search sites flagged "via WARP": the request goes through the
+// SOCKS5 endpoint exposed by the optional warp container (caomingjun/warp,
+// port 1080) so the target site sees WARP's IP instead of the server's.
+// Node's global fetch can't dial through a SOCKS proxy, so this path uses
+// http/https with SocksProxyAgent and follows redirects manually. The
+// headless-browser tier does NOT apply here (that shared browser belongs to
+// the livesoccertv fetcher); if a WARP-flagged site still challenges, the
+// error surfaces on the source card in the UI.
+const { SocksProxyAgent } = require('socks-proxy-agent');
+const nodeHttp = require('http');
+const nodeHttps = require('https');
+
+const socksCache = new Map(); // url -> { html, at }
+const SOCKS_TTL_MS = 5 * 60 * 1000;
+
+function socksGet(url, agent, timeoutMs, redirectsLeft) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https:') ? nodeHttps : nodeHttp;
+    const req = mod.get(url, { agent, headers: BROWSER_HEADERS, timeout: timeoutMs }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirectsLeft > 0) {
+        res.resume(); // drain the redirect body
+        resolve(socksGet(new URL(res.headers.location, url).toString(), agent, timeoutMs, redirectsLeft - 1));
+        return;
+      }
+      if (res.statusCode === 403 || res.statusCode === 503 || res.statusCode === 429) {
+        res.resume();
+        reject(new ChallengeError(`Cloudflare challenge (HTTP ${res.statusCode})`));
+        return;
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => resolve(body));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+  });
+}
+
+async function fetchHtmlViaSocks(url, socksProxy, { timeoutMs = 20000 } = {}) {
+  const hit = socksCache.get(url);
+  if (hit && Date.now() - hit.at < SOCKS_TTL_MS) return hit.html;
+  const agent = new SocksProxyAgent(socksProxy);
+  const html = await socksGet(url, agent, timeoutMs, 4);
+  if (looksLikeChallenge(html)) {
+    throw new ChallengeError('Cloudflare challenge (HTTP 200 interstitial) — the WARP path has no headless-browser fallback');
+  }
+  socksCache.set(url, { html, at: Date.now() });
+  return html;
+}
+
 function getDiagnostics() {
   return {
     ...diagnostics,
@@ -281,4 +338,4 @@ function clearCache() {
   cache.clear();
 }
 
-module.exports = { fetchHtml, getDiagnostics, clearCache, ChallengeError };
+module.exports = { fetchHtml, fetchHtmlViaSocks, getDiagnostics, clearCache, ChallengeError };

@@ -45,9 +45,10 @@ Donations don't fund further development — this project is maintained regardle
 - **📡 Live TV** — what's on now/next for every channel, built-in web player, one-click cast to VLC, search across today's full schedule, favorites
 - **📺 Channels** — import from URL/M3U/file with per-source auto-refresh, bulk manage, online/offline checks, smart tvg-id/EPG matching even across alphabets, audio/video track selection, automatic failover to alternate streams
 - **🔍 Search** — AceStream catalog search with category filters and one-click bulk import
+- **🔎 Search sites** — your own scraping sources for the match search: any site with acestream:// links (ZeroNet zites included), per-site WARP routing, built-in tester
 - **📃 Playlist** — MPEG-TS and HLS links plus combined EPG export, per-source EPG stats, optional program-title translation
 - **🔌 Add-Ons** — VLC remote control, Jellyfin library refresh and Live TV tuner URLs, LAN scanner, optional Cloudflare WARP check
-- **⚽ Football** *(experimental)* — team search, match schedules with kickoff times, broadcasters cross-checked with your playlist ("In your playlist") and one-click import of missing streams
+- **⚽ Football** *(experimental)* — team search, match schedules with kickoff times, broadcasters cross-checked with your playlist ("In your playlist") and one-click import of missing streams via your configured search sites or the engine catalog
 - **📊 Statistics** — live peers/speed for any stream and the streams currently playing through this UI
 - **🩺 Health** — background-job history and per-channel reliability (uptime % over the last 60 checks); failover tries the most reliable stream first
 - **🌍 Extras** — config export/import, PWA, light/dark theme, optional update badge, weekly engine rebuilds
@@ -419,7 +420,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.7.1-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.8.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

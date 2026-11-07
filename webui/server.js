@@ -3,7 +3,7 @@ require('./errorLog').install();
 const express = require('express');
 const multer = require('multer');
 const cron = require('node-cron');
-const { db, getSetting, setSetting, toggleFavoriteChannel, getFavoriteChannelIds, recordWatch, getRecentlyWatched, getStatusStats, runJob, getJobRuns } = require('./db');
+const { db, getSetting, setSetting, toggleFavoriteChannel, getFavoriteChannelIds, recordWatch, getRecentlyWatched, getStatusStats, runJob, getJobRuns, getSearchSites, getEnabledSearchSites, getSearchSite, addSearchSite, updateSearchSite, deleteSearchSite } = require('./db');
 const { refreshEpg, getNowNext, getSourceStats } = require('./epg');
 const { buildM3U, buildXmltv } = require('./playlist');
 const { scrapeUrl, importChannels, refreshSource, refreshAllSources, refreshDueSources } = require('./scraper');
@@ -11,6 +11,7 @@ const { parseM3U } = require('./m3u');
 const { checkAndStore, checkAllChannels } = require('./statuscheck');
 const { getEngineParams, getEngineBaseUrl } = require('./engineConfig');
 const { searchAceStream, CATEGORIES } = require('./search');
+const { scrapeSite } = require('./siteScraper');
 const { getTranslator } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
 const { getCachedTranslations } = require('./translator');
@@ -1466,13 +1467,15 @@ app.get('/football/match', async (req, res) => {
   render(res, 'football_match', { titleKey: 'football.broadcasters_title', matchUrl, matchTitle, coverage: coverageWithMatches, error });
 });
 
-// Ricerca canali per una partita: usa il titolo ("A vs B") per interrogare
-// l'API di ricerca AceStream e proporre i canali da importare — il
-// complemento di "In your playlist", che mostra solo ciò che si ha già.
+// Ricerca canali per una partita: interroga in parallelo tutte le fonti
+// attive — i siti configurati nella pagina "Search sites" (scraping generico
+// dei link acestream:// presenti nell'HTML) e, se lasciata attiva, la
+// ricerca del catalogo AceStream via engine. I risultati, per fonte, si
+// importano o si provano al volo: il complemento di "In your playlist",
+// che mostra solo ciò che si ha già.
 app.get('/football/match/channels', async (req, res) => {
   const matchUrl = (req.query.url || '').trim();
   let title = (req.query.teams || '').trim();
-  let error = null;
 
   // Il titolo arriva normalmente dal link (football.ejs lo conosce);
   // se manca (link condiviso a mano) lo si scrapa dalla pagina match.
@@ -1484,8 +1487,8 @@ app.get('/football/match/channels', async (req, res) => {
     }
   }
 
-  // Query: "A vs B" per prima, poi le due squadre da sole. Se il titolo
-  // non è nel formato atteso si usa tutto come unica query.
+  // Query per la fonte catalogo: "A vs B" per prima, poi le due squadre
+  // da sole. Se il titolo non è nel formato atteso si usa tutto com'unica query.
   const vsParts = title.split(/\s+vs\.?\s+/i).map((s) => s.trim()).filter(Boolean);
   const queries = [];
   const pushQuery = (q) => {
@@ -1500,58 +1503,137 @@ app.get('/football/match/channels', async (req, res) => {
   }
   queries.splice(3);
 
-  // Le query partono in parallelo: in sequenza tre ricerche da ~10 s di
-  // timeout ciascuna rendevano la pagina lentissima (e il motore cerca
-  // già abbastanza piano da solo).
-  const settled = await Promise.allSettled(
-    queries.map((q) => searchAceStream(q, { pageSize: 20 }))
-  );
-  let results = [];
-  let failedQueries = 0;
-  for (const s of settled) {
-    if (s.status === 'fulfilled') results.push(...s.value.results);
-    else failedQueries += 1;
-  }
+  const sites = getEnabledSearchSites();
+  const socksProxy = `socks://${getSetting('warp_host', 'warp')}:${getSetting('warp_port', '1080')}`;
 
-  // Dedup per infohash (la stessa stream emerge da più query) e ranking:
-  // prima quelle il cui nome cita una delle due squadre, poi le altre.
-  const seen = new Map();
-  for (const r of results) {
-    if (!r.infohash) continue;
-    if (!seen.has(r.infohash)) seen.set(r.infohash, r);
-  }
-  const teamTokens = vsParts.map((t) => t.toLowerCase()).filter(Boolean);
-  // Confronto a livello di parola con prefisso bidirezionale (minimo 4
-  // caratteri): i nomi completi di livesoccertv ("Internazionale") devono
-  // trovare anche gli stream che li abbreviano ("Inter HD") — cosa che il
-  // vecchio includes(squadra.slice(0, 6)) mancava, segnando "non
-  // pertinente" proprio gli stream giusti.
-  const isRelevant = (name) => {
-    const words = (name || '').toLowerCase().split(/[^a-z0-9\u00C0-\u024F]+/).filter(Boolean);
-    return words.some((w) =>
-      teamTokens.some((t) => (w.length >= 4 && t.startsWith(w)) || (t.length >= 4 && w.startsWith(t)))
+  // Fonte integrata: catalogo AceStream via engine (le query in parallelo,
+  // v3.7.1). Errore "search-unavailable" solo se falliscono tutte.
+  const runCatalogSource = async (site) => {
+    if (!queries.length) return { site, queries: [], results: [], error: 'no-title' };
+    const settledQ = await Promise.allSettled(
+      queries.map((q) => searchAceStream(q, { pageSize: 20 }))
     );
+    let results = [];
+    let failedQueries = 0;
+    for (const s of settledQ) {
+      if (s.status === 'fulfilled') results.push(...s.value.results);
+      else failedQueries += 1;
+    }
+    // Dedup per infohash (la stessa stream emerge da più query).
+    const seen = new Map();
+    for (const r of results) {
+      if (!r.infohash) continue;
+      if (!seen.has(r.infohash)) seen.set(r.infohash, r);
+    }
+    const teamTokens = vsParts.map((t) => t.toLowerCase()).filter(Boolean);
+    // Confronto a livello di parola con prefisso bidirezionale (minimo 4
+    // caratteri): i nomi completi di livesoccertv ("Internazionale") devono
+    // trovare anche gli stream che li abbreviano ("Inter HD").
+    const isRelevant = (name) => {
+      const words = (name || '').toLowerCase().split(/[^a-z0-9\u00C0-\u024F]+/).filter(Boolean);
+      return words.some((w) =>
+        teamTokens.some((t) => (w.length >= 4 && t.startsWith(w)) || (t.length >= 4 && w.startsWith(t)))
+      );
+    };
+    const merged = [...seen.values()].map((r) => ({ ...r, relevant: isRelevant(r.name) }));
+    merged.sort(
+      (a, b) =>
+        Number(b.relevant) - Number(a.relevant) ||
+        (b.status === 2) - (a.status === 2) ||
+        a.name.localeCompare(b.name)
+    );
+    return {
+      site,
+      queries,
+      results: merged,
+      error: failedQueries === queries.length ? 'search-unavailable' : null,
+    };
   };
-  const merged = [...seen.values()].map((r) => ({ ...r, relevant: isRelevant(r.name) }));
-  merged.sort(
-    (a, b) =>
-      Number(b.relevant) - Number(a.relevant) ||
-      (b.status === 2) - (a.status === 2) ||
-      a.name.localeCompare(b.name)
-  );
 
-  if (!queries.length) error = 'no-title';
-  else if (failedQueries === queries.length) error = 'search-unavailable';
+  // Fonte sito: scraping generico. Un sito con {query} nel template senza
+  // titolo disponibile non parte (cerca "vuoto" sarebbe solo rumore); una
+  // pagina fissa invece sì — è pensata proprio per listing statici/zite.
+  const runSiteSource = async (site) => {
+    const needsQuery = site.url_template.includes('{query}') || site.url_template.includes('{query_plus}');
+    if (needsQuery && !title) {
+      return { site, results: [], error: 'no-title', url: '' };
+    }
+    const r = await scrapeSite(site, title, { socksProxy });
+    return {
+      site,
+      results: r.results,
+      error: r.error === 'empty-url' ? 'bad-url' : r.error,
+      isChallenge: !!r.isChallenge,
+      url: r.url,
+    };
+  };
+
+  // Tutto in parallelo: una fonte lenta o rotta non blocca né rallenta le altre.
+  const settled = await Promise.allSettled(
+    sites.map((site) =>
+      site.is_builtin === 'acestream-catalog' ? runCatalogSource(site) : runSiteSource(site)
+    )
+  );
+  const sources = settled.map((s, i) =>
+    s.status === 'fulfilled'
+      ? s.value
+      : { site: sites[i], results: [], error: (s.reason && s.reason.message) || 'failed' }
+  );
 
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
   render(res, 'football_match_channels', {
     titleKey: 'football.find_channels_title',
     matchUrl,
     matchTitle: title,
-    queries,
-    results: merged,
-    error,
+    sources,
     acexyBaseUrl,
+  });
+});
+
+// ---------- Siti di ricerca (fonti per "Find channels for this match") ----------
+
+app.get('/search-sites', (req, res) => {
+  render(res, 'search_sites', { titleKey: 'sites.title', sites: getSearchSites() });
+});
+
+app.post('/search-sites/add', (req, res) => {
+  const name = String(req.body.name || '').trim().slice(0, 60);
+  const urlTemplate = String(req.body.url_template || '').trim().slice(0, 500);
+  if (name && urlTemplate) {
+    addSearchSite({ name, urlTemplate, useWarp: req.body.use_warp === 'on' });
+  }
+  res.redirect('/search-sites');
+});
+
+// I checkbox non spuntati non arrivano nel body: enabled/use_warp si leggono
+// entrambi qui e basta (il form della riga li contiene sempre).
+app.post('/search-sites/:id/update', (req, res) => {
+  updateSearchSite(parseInt(req.params.id, 10), {
+    enabled: req.body.enabled === 'on',
+    useWarp: req.body.use_warp === 'on',
+  });
+  res.redirect('/search-sites');
+});
+
+app.post('/search-sites/:id/delete', (req, res) => {
+  deleteSearchSite(parseInt(req.params.id, 10));
+  res.redirect('/search-sites');
+});
+
+// Prova un template senza uscire dalla pagina: scarica con una query
+// d'esempio e riporta quanti link acestream ha trovato (e i primi nomi).
+app.get('/search-sites/:id/test', async (req, res) => {
+  const site = getSearchSite(parseInt(req.params.id, 10));
+  if (!site || site.is_builtin) return res.status(404).json({ ok: false, error: 'not found' });
+  const sample = String(req.query.q || 'Inter Milan').slice(0, 120);
+  const socksProxy = `socks://${getSetting('warp_host', 'warp')}:${getSetting('warp_port', '1080')}`;
+  const r = await scrapeSite(site, sample, { socksProxy });
+  res.json({
+    ok: !r.error,
+    count: r.results.length,
+    names: r.results.slice(0, 3).map((x) => x.name),
+    error: r.error === 'empty-url' ? 'missing URL template' : r.error,
+    url: r.url,
   });
 });
 

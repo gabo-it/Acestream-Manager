@@ -2,97 +2,130 @@
   ← <%= t('football.back_to_match') %>
 </a>
 
-<h1 class="text-2xl font-bold mb-2"><%= t('football.find_channels_title') %></h1>
-<% if (matchTitle) { %>
-  <p class="text-sm text-slate-400 mb-2"><%= matchTitle %></p>
-<% } %>
+<div class="flex items-start justify-between gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-bold mb-2"><%= t('football.find_channels_title') %></h1>
+    <% if (matchTitle) { %>
+      <p class="text-sm text-slate-400 mb-2"><%= matchTitle %></p>
+    <% } %>
+  </div>
+  <a href="/search-sites" class="text-xs text-indigo-400 hover:text-indigo-300 underline">⚙ <%= t('football.find_channels_manage') %></a>
+</div>
 
-<% if (error === 'no-title') { %>
+<% if (!matchTitle) { %>
   <div class="rounded-lg border border-amber-900 bg-amber-950/40 text-amber-200 px-4 py-3 text-sm mb-6">
     <%= t('football.find_channels_no_title') %>
     <a href="<%= matchUrl %>" target="_blank" rel="noopener" class="text-indigo-400 underline ml-1"><%= t('football.open_original') %></a>
   </div>
+<% } else if (!sources.length) { %>
+  <div class="rounded-lg border border-amber-900 bg-amber-950/40 text-amber-200 px-4 py-3 text-sm mb-6">
+    <%= t('football.find_channels_no_sources') %>
+    <a href="/search-sites" class="text-indigo-400 underline ml-1"><%= t('football.find_channels_manage') %></a>
+  </div>
 <% } else { %>
-  <% if (queries.length) { %>
-    <div class="flex items-center flex-wrap gap-1.5 mb-4">
-      <span class="text-xs text-slate-500"><%= t('football.find_channels_subtitle') %></span>
-      <% queries.forEach(function(q) { %>
-        <span class="rounded-full bg-slate-800 px-2.5 py-1 text-xs text-slate-300 font-mono"><%= q %></span>
-      <% }); %>
-    </div>
-  <% } %>
-
-  <% if (error === 'search-unavailable') { %>
-    <div class="rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm mb-6">
-      <%= t('football.find_channels_unavailable') %>
-    </div>
-  <% } %>
-
-  <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-    <p class="text-sm text-slate-500"><%= results.length %> <%= t('search.results_for') %> "<%= matchTitle || t('football.find_channels_title') %>"</p>
-    <% if (results.length > 0) { %>
-      <div class="flex items-center gap-3">
-        <label class="flex items-center gap-2 text-sm text-slate-400">
-          <input type="checkbox" id="mc-select-all" class="rounded bg-slate-950 border-slate-700" onchange="toggleMcAll(this)" />
-          <%= t('sources.select_all') %>
-        </label>
-        <button type="button" onclick="importMcSelected()" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-3 py-1.5 text-sm font-medium">
-          <%= t('search.import_selected') %>
-        </button>
-      </div>
-    <% } %>
+  <div class="flex items-center justify-end mb-4 flex-wrap gap-3">
+    <button type="button" onclick="importMcSelected()" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-3 py-1.5 text-sm font-medium">
+      <%= t('search.import_selected') %>
+    </button>
   </div>
 
-  <div class="grid gap-3">
-    <% results.forEach(function(r, i) { %>
-      <% const streamUrl = `${(acexyBaseUrl || '').replace(/\/$/, '')}/ace/getstream?id=${r.infohash}`; %>
-      <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4 flex items-center gap-4">
-        <input type="checkbox" class="mc-checkbox rounded bg-slate-950 border-slate-700 flex-shrink-0" data-index="<%= i %>" />
-        <img src="<%= r.icon || 'https://placehold.co/64x64/1e293b/94a3b8?text=%20' %>"
-             class="w-12 h-12 rounded-lg object-cover bg-slate-800 flex-shrink-0" alt="" />
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="w-2 h-2 rounded-full flex-shrink-0 <%= r.status === 2 ? 'bg-emerald-500' : 'bg-amber-500' %>"
-                  title="<%= r.status === 2 ? t('search.available') : t('search.uncertain') %>"></span>
-            <span class="font-medium truncate"><%= r.name %></span>
-            <% if (r.relevant) { %>
-              <span class="text-xs rounded-full bg-indigo-950/60 border border-indigo-700/60 px-2 py-0.5 text-indigo-300">⚽ <%= t('football.find_channels_relevant') %></span>
-            <% } %>
-            <% if (r.categories) { %>
-              <span class="text-xs rounded-full bg-slate-800 px-2 py-0.5 text-slate-400"><%= r.categories %></span>
-            <% } %>
-          </div>
-          <div class="text-xs text-slate-500 font-mono truncate"><%= r.infohash %></div>
-          <div class="flex items-center gap-3 mt-2 text-xs">
-            <a href="/watch-direct?id=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
-            <a href="/vlc-direct.m3u?id=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
-            <a href="acestream://<%= r.infohash %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.aceplayer') %></a>
-            <button type="button" onclick="copyMcLink('<%= streamUrl %>', this)" class="text-slate-400 hover:text-indigo-400 transition">
-              <%= t('channels.copy_link') %>
-            </button>
-          </div>
+  <% sources.forEach(function(source, si) { %>
+    <section class="mb-8">
+      <div class="flex items-center justify-between gap-4 flex-wrap mb-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h2 class="font-medium"><%= source.site.name %></h2>
+          <% if (source.site.use_warp) { %>
+            <span class="text-xs rounded-full bg-amber-950/60 border border-amber-700/60 px-2 py-0.5 text-amber-300" title="<%= t('sites.warp_label') %>">WARP</span>
+          <% } %>
+          <% if (source.error) { %>
+            <span class="text-xs rounded-full bg-red-950/60 border border-red-800/60 px-2 py-0.5 text-red-300"><%= t('football.find_channels_source_error') %></span>
+          <% } else if (source.results.length === 0) { %>
+            <span class="text-xs text-slate-500"><%= t('football.find_channels_zero') %></span>
+          <% } else { %>
+            <span class="text-xs text-slate-500"><%= source.results.length %></span>
+          <% } %>
         </div>
-        <form method="POST" action="/search/import" class="flex-shrink-0">
-          <input type="hidden" name="name" value="<%= r.name %>" />
-          <input type="hidden" name="infohash" value="<%= r.infohash %>" />
-          <input type="hidden" name="category" value="<%= r.categories %>" />
-          <input type="hidden" name="logo_url" value="<%= r.icon %>" />
-          <button class="text-sm text-indigo-400 hover:text-indigo-300 transition px-3 py-1.5 rounded-lg border border-slate-800">
-            <%= t('search.add') %>
-          </button>
-        </form>
+        <% if (source.results.length > 1) { %>
+          <label class="flex items-center gap-2 text-sm text-slate-400">
+            <input type="checkbox" class="src-select-all rounded bg-slate-950 border-slate-700" data-src="<%= si %>" onchange="toggleSrcAll(this)" />
+            <%= t('sources.select_all') %>
+          </label>
+        <% } %>
       </div>
-    <% }); %>
-    <% if (results.length === 0 && !error) { %>
-      <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400">
-        <%= t('search.no_results') %>
+
+      <% if (source.error) { %>
+        <div class="rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm mb-3">
+          <% if (source.error === 'search-unavailable') { %>
+            <%= t('football.find_channels_unavailable') %>
+          <% } else if (source.error === 'no-title') { %>
+            <%= t('football.find_channels_no_title') %>
+          <% } else { %>
+            <%= t('football.find_channels_source_error') %>: <%= source.error %>
+          <% } %>
+        </div>
+      <% } %>
+
+      <% if (source.queries && source.queries.length) { %>
+        <div class="flex items-center flex-wrap gap-1.5 mb-2">
+          <span class="text-xs text-slate-500"><%= t('football.find_channels_subtitle') %></span>
+          <% source.queries.forEach(function(q) { %>
+            <span class="rounded-full bg-slate-800 px-2.5 py-1 text-xs text-slate-300 font-mono"><%= q %></span>
+          <% }); %>
+        </div>
+      <% } %>
+
+      <div class="grid gap-2">
+        <% source.results.forEach(function(r, ri) { %>
+          <% const streamUrl = `${(acexyBaseUrl || '').replace(/\/$/, '')}/ace/getstream?id=${r.infohash}`; %>
+          <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-3 flex items-center gap-3">
+            <input type="checkbox" class="mc-checkbox rounded bg-slate-950 border-slate-700 flex-shrink-0" data-src="<%= si %>" data-index="<%= ri %>" />
+            <% if (r.icon) { %>
+              <img src="<%= r.icon %>" class="w-10 h-10 rounded-lg object-cover bg-slate-800 flex-shrink-0" alt="" onerror="this.style.display='none'" />
+            <% } %>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <% if (source.site.is_builtin) { %>
+                  <span class="w-2 h-2 rounded-full flex-shrink-0 <%= r.status === 2 ? 'bg-emerald-500' : 'bg-amber-500' %>"
+                        title="<%= r.status === 2 ? t('search.available') : t('search.uncertain') %>"></span>
+                <% } %>
+                <span class="font-medium truncate"><%= r.name %></span>
+                <% if (source.site.is_builtin && r.relevant) { %>
+                  <span class="text-xs rounded-full bg-indigo-950/60 border border-indigo-700/60 px-2 py-0.5 text-indigo-300">⚽ <%= t('football.find_channels_relevant') %></span>
+                <% } %>
+                <% if (r.categories) { %>
+                  <span class="text-xs rounded-full bg-slate-800 px-2 py-0.5 text-slate-400"><%= r.categories %></span>
+                <% } %>
+              </div>
+              <div class="text-xs text-slate-500 font-mono truncate"><%= r.infohash %></div>
+              <div class="flex items-center gap-3 mt-1.5 text-xs">
+                <a href="/watch-direct?id=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
+                <a href="/vlc-direct.m3u?id=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
+                <a href="acestream://<%= r.infohash %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.aceplayer') %></a>
+                <button type="button" onclick="copyMcLink('<%= streamUrl %>', this)" class="text-slate-400 hover:text-indigo-400 transition">
+                  <%= t('channels.copy_link') %>
+                </button>
+              </div>
+            </div>
+            <form method="POST" action="/search/import" class="flex-shrink-0">
+              <input type="hidden" name="name" value="<%= r.name %>" />
+              <input type="hidden" name="infohash" value="<%= r.infohash %>" />
+              <input type="hidden" name="category" value="<%= r.categories %>" />
+              <input type="hidden" name="logo_url" value="<%= r.icon %>" />
+              <button class="text-sm text-indigo-400 hover:text-indigo-300 transition px-3 py-1.5 rounded-lg border border-slate-800">
+                <%= t('search.add') %>
+              </button>
+            </form>
+          </div>
+        <% }); %>
       </div>
-    <% } %>
-  </div>
+    </section>
+  <% }); %>
 <% } %>
 
 <script>
-  var mcResults = <%- JSON.stringify(results || []) %>;
+  // Risultati serializzati per fonte: i checkbox portano data-src (indice
+  // fonte) e data-index (riga), così l'import di massa ritrova tutto.
+  var mcSources = <%- JSON.stringify(sources.map(function (s) { return { name: s.site.name, results: s.results }; })) %>;
   var mcMatchUrl = <%- JSON.stringify(matchUrl || '') %>;
 
   function copyMcLink(url, btn) {
@@ -106,8 +139,9 @@
     });
   }
 
-  function toggleMcAll(checkbox) {
-    document.querySelectorAll('.mc-checkbox').forEach(function (cb) { cb.checked = checkbox.checked; });
+  function toggleSrcAll(checkbox) {
+    var src = checkbox.dataset.src;
+    document.querySelectorAll('.mc-checkbox[data-src="' + src + '"]').forEach(function (cb) { cb.checked = checkbox.checked; });
   }
 
   // Dopo l'import si torna alla pagina della partita: i canali appena
@@ -115,8 +149,9 @@
   function importMcSelected() {
     var selected = [];
     document.querySelectorAll('.mc-checkbox:checked').forEach(function (cb) {
-      var r = mcResults[parseInt(cb.dataset.index, 10)];
-      selected.push({ name: r.name, infohash: r.infohash, category: r.categories, logo_url: r.icon });
+      var r = (mcSources[parseInt(cb.dataset.src, 10)] || { results: [] }).results[parseInt(cb.dataset.index, 10)];
+      if (!r) return;
+      selected.push({ name: r.name, infohash: r.infohash, category: r.categories || '', logo_url: r.icon || '' });
     });
     if (selected.length === 0) return;
 
