@@ -8,6 +8,29 @@
   <%= t('football.experimental_note') %>
 </div>
 
+<% const st = typeof footballStatus !== 'undefined' ? footballStatus : null; %>
+<% if (st) { %>
+  <div class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs text-slate-400 mb-6 max-w-xl flex items-center justify-between gap-3">
+    <div>
+      <% if (st.teamIndexSize > 0) { %>
+        <span class="text-emerald-400">●</span>
+        <%= t('football.status_ok').replace('{teams}', st.teamIndexSize) %>
+      <% } else { %>
+        <span class="text-red-400">●</span>
+        <%= t('football.status_blocked') %>
+      <% } %>
+      <% if (st.lastSource === 'browser') { %>
+        <span class="text-slate-500">· <%= t('football.status_via_browser') %></span>
+      <% } %>
+    </div>
+    <div class="flex items-center gap-3 flex-shrink-0">
+      <form method="POST" action="/football/index/refresh">
+        <button class="text-slate-400 hover:text-indigo-300 underline"><%= t('football.refresh_index') %></button>
+      </form>
+    </div>
+  </div>
+<% } %>
+
 <form method="GET" action="/football" class="flex gap-2 mb-6 max-w-xl">
   <input type="text" name="team" value="<%= team || '' %>" required placeholder="<%= t('football.placeholder') %>"
          class="flex-1 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
@@ -32,9 +55,14 @@
       <div class="grid gap-2">
         <% favoriteMatches.forEach(function(m) { %>
           <a href="/football/match?url=<%= encodeURIComponent(m.url) %>"
-             class="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 hover:border-indigo-500 transition flex items-center justify-between text-sm">
-            <span><%= m.title %></span>
-            <% if (m.date) { %><span class="text-xs text-slate-500 flex-shrink-0 ml-2"><%= m.date %></span><% } %>
+             class="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 hover:border-indigo-500 transition flex items-center justify-between gap-2 text-sm">
+            <span class="min-w-0">
+              <span class="block truncate"><%= m.title %></span>
+              <% if (m.competition) { %><span class="block text-xs text-slate-500"><%= m.competition %></span><% } %>
+            </span>
+            <span class="text-xs text-indigo-300 flex-shrink-0 ml-2 whitespace-nowrap">
+              <% if (m.ko) { %><%= m.ko.date %><% if (m.ko.time) { %> · <%= m.ko.time %><% } %><% } else if (m.date) { %><%= m.date %><% } %>
+            </span>
           </a>
         <% }); %>
       </div>

@@ -1,17 +1,11 @@
 <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
   <h1 class="text-3xl font-bold tracking-tight"><%= t('tv.title') %></h1>
-  <form id="tv-search-form" method="GET" action="/tv" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
-    <input type="hidden" name="ds" id="guide-ds" disabled />
+  <form method="GET" action="/tv" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
     <input type="text" name="q" value="<%= q || '' %>" placeholder="<%= t('channels.search_placeholder') %>"
            class="bg-transparent px-3.5 py-2.5 text-sm focus:outline-none w-56 placeholder:text-slate-600" />
     <button class="px-3.5 py-2.5 text-slate-500 hover:text-indigo-400 transition">🔍</button>
   </form>
 </div>
-
-<label class="inline-flex items-center gap-2 text-xs text-slate-400 cursor-pointer mb-4" title="<%= t('channels.guide_hint') %>">
-  <input type="checkbox" id="guide-checkbox" name="guide" value="1" form="tv-search-form" <%= guideOn ? 'checked' : '' %> class="rounded bg-slate-950 border-slate-700" />
-  <%= t('channels.guide_checkbox') %>
-</label>
 
 <!-- Elenco canali -->
 <% if (channels.length === 0) { %>
@@ -48,17 +42,6 @@
             <% } %>
           <% } else { %>
             <p class="text-sm text-slate-600"><%= t('tv.no_epg') %></p>
-          <% } %>
-          <% const gm = guideMatches[ch.id]; %>
-          <% if (gm && gm.length) { %>
-            <div class="mt-1.5 pt-1.5 border-t border-amber-900/40 text-xs">
-              <% gm.slice(0, 4).forEach(function(m) { %>
-                <p class="truncate <%= m.stop_ts < Date.now() ? 'text-slate-600' : 'text-amber-200/80' %>">
-                  <span class="font-mono text-slate-500" data-tv-format-range="<%= m.start_ts %>|<%= m.stop_ts %>">—</span> <%= m.title %>
-                </p>
-              <% }); %>
-              <% if (gm.length > 4) { %><p class="text-slate-500">+<%= gm.length - 4 %> <%= t('channels.guide_more') %></p><% } %>
-            </div>
           <% } %>
         </div>
       </button>
@@ -259,18 +242,4 @@
     var parts = el.dataset.tvFormatRange.split('|').map(function (s) { return parseInt(s, 10); });
     if (parts[0] && parts[1]) el.textContent = formatTime(parts[0]) + '–' + formatTime(parts[1]);
   });
-
-  // Ricerca nel palinsesto del giorno: il browser invia la propria
-  // mezzanotte locale ("ds"), il container gira in UTC.
-  (function () {
-    var form = document.getElementById('tv-search-form');
-    var box = document.getElementById('guide-checkbox');
-    var ds = document.getElementById('guide-ds');
-    if (!form || !box || !ds) return;
-    form.addEventListener('submit', function () {
-      var now = new Date();
-      ds.value = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      ds.disabled = !box.checked;
-    });
-  })();
 </script>

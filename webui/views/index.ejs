@@ -4,9 +4,8 @@
     <span class="text-slate-500 text-lg font-normal ml-1">(<%= channels.length %>)</span>
   </h1>
   <div class="flex items-center gap-2">
-    <form id="channel-search-form" method="GET" action="/channels" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
+    <form method="GET" action="/channels" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
       <% if (filter) { %><input type="hidden" name="filter" value="<%= filter %>" /><% } %>
-      <input type="hidden" name="ds" id="guide-ds" disabled />
       <input type="text" name="q" value="<%= q || '' %>" placeholder="<%= t('channels.search_placeholder') %>"
              class="bg-transparent px-3.5 py-2.5 text-sm focus:outline-none w-56 placeholder:text-slate-600" />
       <button class="px-3.5 py-2.5 text-slate-500 hover:text-indigo-400 transition"><%= t('channels.search_btn') %></button>
@@ -73,7 +72,7 @@
   }
 </script>
 
-<div class="mb-6 flex items-center gap-x-6 gap-y-2 flex-wrap">
+<div class="mb-6">
   <% if (filter === 'without_epg') { %>
     <span class="inline-flex items-center gap-2 text-xs rounded-full bg-amber-950/60 border border-amber-800/60 text-amber-300 px-3 py-1.5">
       <%= t('channels.filter_without_epg_active') %>
@@ -84,10 +83,6 @@
       <%= t('channels.filter_without_epg_link') %>
     </a>
   <% } %>
-  <label class="inline-flex items-center gap-2 text-xs text-slate-400 cursor-pointer" title="<%= t('channels.guide_hint') %>">
-    <input type="checkbox" id="guide-checkbox" name="guide" value="1" form="channel-search-form" <%= guideOn ? 'checked' : '' %> class="rounded bg-slate-950 border-slate-700" />
-    <%= t('channels.guide_checkbox') %>
-  </label>
 </div>
 
 <% if (channels.length === 0) { %>
@@ -152,18 +147,6 @@
               <% } %>
               <% if (nn && nn.next) { %>
                 <div class="text-xs text-slate-500 truncate"><%= t('channels.up_next') %>: <%= nn.next.title %></div>
-              <% } %>
-              <% const gm = guideMatches[ch.id]; %>
-              <% if (gm && gm.length) { %>
-                <div class="mt-2 rounded-lg border border-amber-900/40 bg-amber-950/20 px-2.5 py-1.5 text-xs">
-                  <div class="text-amber-400/80 mb-0.5"><%= t('channels.guide_matches') %></div>
-                  <% gm.slice(0, 5).forEach(function(m) { %>
-                    <div class="truncate <%= m.stop_ts < Date.now() ? 'text-slate-600' : 'text-slate-300' %>">
-                      <span class="font-mono text-slate-500" data-guide-range="<%= m.start_ts %>|<%= m.stop_ts %>">—</span> <%= m.title %>
-                    </div>
-                  <% }); %>
-                  <% if (gm.length > 5) { %><div class="text-slate-500">+<%= gm.length - 5 %> <%= t('channels.guide_more') %></div><% } %>
-                </div>
               <% } %>
               <div class="flex items-center gap-3 mt-2.5 text-xs">
                 <a href="/watch/<%= ch.id %>" class="text-slate-500 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
@@ -483,26 +466,4 @@
         .catch(function () { panel.innerHTML = '<p class="text-red-400">' + i18n.error + '</p>'; });
     }
   }
-</script>
-
-<script>
-  // Ricerca nel palinsesto del giorno: il browser invia la propria
-  // mezzanotte locale ("ds"), perché il container gira in UTC e solo qui
-  // si conosce il vero fuso orario dell'utente.
-  (function () {
-    var form = document.getElementById('channel-search-form');
-    var box = document.getElementById('guide-checkbox');
-    var ds = document.getElementById('guide-ds');
-    if (form && box && ds) {
-      form.addEventListener('submit', function () {
-        var now = new Date();
-        ds.value = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-        ds.disabled = !box.checked;
-      });
-    }
-    document.querySelectorAll('[data-guide-range]').forEach(function (el) {
-      var parts = el.dataset.guideRange.split('|').map(function (x) { return parseInt(x, 10); });
-      if (parts[0] && parts[1]) el.textContent = formatTime(parts[0]) + '–' + formatTime(parts[1]);
-    });
-  })();
 </script>

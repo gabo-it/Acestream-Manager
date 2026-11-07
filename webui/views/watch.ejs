@@ -15,26 +15,6 @@
 
   <div id="stream-info" class="hidden mt-3 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs text-slate-400 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1"></div>
 
-  <div id="tracks-box" class="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs text-slate-400">
-    <div class="flex items-center gap-3 flex-wrap">
-      <button type="button" id="tracks-detect-btn" class="rounded-lg border border-slate-700 hover:bg-slate-800 transition px-3 py-1.5">
-        <%= t('watch.tracks_detect') %>
-      </button>
-      <span id="tracks-status" class="text-slate-500"></span>
-    </div>
-    <div id="tracks-select" class="hidden mt-3 flex gap-4 flex-wrap">
-      <label id="tracks-audio-wrap" class="hidden flex items-center gap-2">
-        <span class="text-slate-500"><%= t('watch.tracks_audio') %></span>
-        <select id="tracks-audio" class="rounded-lg bg-slate-950 border border-slate-800 px-2 py-1 text-xs max-w-full"></select>
-      </label>
-      <label id="tracks-video-wrap" class="hidden flex items-center gap-2">
-        <span class="text-slate-500"><%= t('watch.tracks_video') %></span>
-        <select id="tracks-video" class="rounded-lg bg-slate-950 border border-slate-800 px-2 py-1 text-xs max-w-full"></select>
-      </label>
-    </div>
-    <p id="tracks-note" class="hidden mt-2 text-slate-600"><%= t('watch.tracks_note') %></p>
-  </div>
-
   <p id="player-error" class="hidden mt-4 rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm">
     <span id="player-error-detail"></span><br />
     <%= t('watch.fallback_before') %>
@@ -109,7 +89,7 @@
       destroyPlayer();
       if (detail) errorDetail.textContent = detail;
       errorBox.classList.remove('hidden');
-      console.error('[watch] Playback failed:', detail || '(no detail)');
+      console.error('[watch] Riproduzione fallita:', detail || '(nessun dettaglio)');
     }
 
     function destroyPlayer() {
@@ -138,10 +118,6 @@
 
     var remuxRetryCount = 0;
     var MAX_REMUX_RETRIES = 3;
-    // Tracce scelte dall'utente ({ a, v }, indici per tipo; null = automatico).
-    // Quando impostato, si riproduce SOLO via remux server-side (l'unico
-    // percorso in cui possiamo scegliere la traccia): vedi playWithTracks().
-    var chosenTracks = null;
 
     // Ultimo fallback, solo quando anche mpegts.js senza audio ha fallito:
     // remux server-side a MP4 frammentato (via ffmpeg), riprodotto dal
@@ -158,17 +134,12 @@
 
     function startRemux() {
       setStatus(<%- JSON.stringify(t('watch.trying_remux')) %> + (remuxRetryCount > 0 ? ' (' + remuxRetryCount + '/' + MAX_REMUX_RETRIES + ')' : ''));
-      var trackQuery = '';
-      if (chosenTracks) {
-        if (chosenTracks.a !== null) trackQuery += '&a=' + chosenTracks.a;
-        if (chosenTracks.v !== null) trackQuery += '&v=' + chosenTracks.v;
-      }
-      video.src = '/stream-proxy/fmp4/' + acestreamId + '?_r=' + Date.now() + trackQuery;
+      video.src = '/stream-proxy/fmp4/' + acestreamId + '?_r=' + Date.now();
       video.load();
       var onError = function () {
         video.removeEventListener('error', onError);
-        var detail = video.error ? ('code ' + video.error.code + (video.error.message ? ' — ' + video.error.message : '')) : '(no detail)';
-        console.error('[watch] remux: native <video> error:', detail);
+        var detail = video.error ? ('code ' + video.error.code + (video.error.message ? ' — ' + video.error.message : '')) : '(nessun dettaglio)';
+        console.error('[watch] remux: errore nativo del <video>:', detail);
 
         if (remuxRetryCount < MAX_REMUX_RETRIES) {
           remuxRetryCount += 1;
@@ -185,15 +156,14 @@
         if (err && err.name === 'NotAllowedError') {
           setStatus(<%- JSON.stringify(t('watch.click_to_play')) %>);
         } else {
-          console.warn('[watch] remux play() failed:', err && err.message);
+          console.warn('[watch] play() remux fallito:', err && err.message);
         }
       });
     }
 
     function startPlayer() {
-      if (chosenTracks) return; // l'utente ha scelto una traccia: si usa solo il remux
       if (typeof mpegts === 'undefined') {
-        showError(<%- JSON.stringify(t('watch.player_lib_missing')) %>);
+        showError('mpegts.js non caricato.');
         return;
       }
       if (!mpegts.getFeatureList().mseLivePlayback) {
@@ -305,7 +275,7 @@
         if (err && err.name === 'NotAllowedError') {
           setStatus(<%- JSON.stringify(t('watch.click_to_play')) %>);
         } else {
-          console.warn('[watch] play() failed:', err && err.message);
+          console.warn('[watch] play() fallito:', err && err.message);
         }
       });
     }
@@ -317,107 +287,9 @@
     window.addEventListener('unhandledrejection', function (event) {
       var msg = event.reason && event.reason.message ? event.reason.message : String(event.reason);
       if (msg && msg.indexOf('emit') !== -1) {
-        console.warn('[watch] Ignored internal mpegts.js rejection:', msg);
+        console.warn('[watch] Rifiuto interno mpegts.js ignorato:', msg);
         event.preventDefault();
       }
-    });
-
-    // ---- Scelta traccia audio/video ----
-    function playWithTracks(a, v) {
-      chosenTracks = { a: a, v: v };
-      finished = false;
-      remuxRetryCount = 0;
-      errorBox.classList.add('hidden');
-      destroyPlayer();
-      setTimeout(startRemux, 150);
-    }
-
-    var TRK = {
-      detecting: <%- JSON.stringify(t('watch.tracks_detecting')) %>,
-      failed: <%- JSON.stringify(t('watch.tracks_failed')) %>,
-      auto: <%- JSON.stringify(t('watch.tracks_auto')) %>,
-      single: <%- JSON.stringify(t('watch.tracks_single')) %>,
-      found: <%- JSON.stringify(t('watch.tracks_found')) %>
-    };
-    var CODEC_NAMES = { aac: 'AAC', ac3: 'AC-3', eac3: 'E-AC-3', mp2: 'MP2', mp3: 'MP3', dts: 'DTS', opus: 'Opus',
-                        h264: 'H.264', hevc: 'H.265', mpeg2video: 'MPEG-2', mpeg4: 'MPEG-4', vc1: 'VC-1' };
-    function codecName(c) { return CODEC_NAMES[c] || (c ? c.toUpperCase() : '?'); }
-    function audioLabel(t, i) {
-      var layout = t.channels === 2 ? 'stereo' : t.channels === 1 ? 'mono' : t.channels === 6 ? '5.1' : t.channels ? t.channels + 'ch' : '';
-      return ['#' + (i + 1), codecName(t.codec) + (layout ? ' ' + layout : ''), t.language, t.title,
-              t.bitrate ? t.bitrate + ' kbps' : ''].filter(Boolean).join(' · ');
-    }
-    function videoLabel(t, i) {
-      return ['#' + (i + 1), codecName(t.codec), t.width && t.height ? t.width + '×' + t.height : '',
-              t.fps ? t.fps + ' fps' : '', t.bitrate ? t.bitrate + ' kbps' : ''].filter(Boolean).join(' · ');
-    }
-    function fillSelect(sel, tracks, labelFn) {
-      sel.innerHTML = '';
-      var auto = document.createElement('option');
-      auto.value = '';
-      auto.textContent = TRK.auto;
-      sel.appendChild(auto);
-      tracks.forEach(function (t, i) {
-        var o = document.createElement('option');
-        o.value = String(i);
-        o.textContent = labelFn(t, i);
-        sel.appendChild(o);
-      });
-    }
-
-    var tracksBtn = document.getElementById('tracks-detect-btn');
-    var tracksStatus = document.getElementById('tracks-status');
-    var tracksSelect = document.getElementById('tracks-select');
-    var tracksNote = document.getElementById('tracks-note');
-    var audioSel = document.getElementById('tracks-audio');
-    var videoSel = document.getElementById('tracks-video');
-    var audioWrap = document.getElementById('tracks-audio-wrap');
-    var videoWrap = document.getElementById('tracks-video-wrap');
-
-    function onTrackChange() {
-      var a = audioSel.value === '' ? null : parseInt(audioSel.value, 10);
-      var v = videoSel.value === '' ? null : parseInt(videoSel.value, 10);
-      if (a === null && v === null) {
-        // Di nuovo "automatico": si riparte da zero col percorso normale.
-        if (chosenTracks) window.location.reload();
-        return;
-      }
-      playWithTracks(a, v);
-    }
-    audioSel.addEventListener('change', onTrackChange);
-    videoSel.addEventListener('change', onTrackChange);
-
-    tracksBtn.addEventListener('click', function () {
-      tracksBtn.disabled = true;
-      tracksStatus.textContent = TRK.detecting;
-      fetch('/stream-proxy/tracks/' + acestreamId)
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          tracksBtn.disabled = false;
-          if (!d.ok) {
-            tracksStatus.textContent = TRK.failed + ': ' + d.error;
-            return;
-          }
-          tracksStatus.textContent = TRK.found.replace('{a}', d.audio.length).replace('{v}', d.video.length);
-          var multi = d.audio.length > 1 || d.video.length > 1;
-          if (!multi) {
-            var parts = [];
-            if (d.video[0]) parts.push(videoLabel(d.video[0], 0).replace('#1 · ', ''));
-            if (d.audio[0]) parts.push(audioLabel(d.audio[0], 0).replace('#1 · ', ''));
-            tracksStatus.textContent = TRK.single + (parts.length ? ' (' + parts.join(' / ') + ')' : '');
-            return;
-          }
-          fillSelect(audioSel, d.audio, audioLabel);
-          fillSelect(videoSel, d.video, videoLabel);
-          audioWrap.classList.toggle('hidden', d.audio.length < 2);
-          videoWrap.classList.toggle('hidden', d.video.length < 2);
-          tracksSelect.classList.remove('hidden');
-          tracksNote.classList.remove('hidden');
-        })
-        .catch(function (err) {
-          tracksBtn.disabled = false;
-          tracksStatus.textContent = TRK.failed + ': ' + (err && err.message ? err.message : '');
-        });
     });
 
     setStatus(<%- JSON.stringify(t('watch.trying_ts')) %>);
