@@ -90,6 +90,11 @@
   </label>
 </div>
 
+<!-- Preview del matching in blocco canali ↔ EPG: riempita via JS dopo la
+     verifica dei canali (vedi startEpgMatch), niente è salvato finché
+     l'utente non preme Apply. -->
+<div id="epg-match-panel" class="hidden mb-6 rounded-xl border border-indigo-900/60 bg-slate-900/60 p-4"></div>
+
 <% if (channels.length === 0) { %>
   <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400">
     <%= t('channels.empty') %>
@@ -109,10 +114,10 @@
               class="rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 transition px-3 py-1.5">
         <%= t('channels.delete_selected') %>
       </button>
-      <button type="button" onclick="repairInfohashIds(this)"
-              title="<%= t('channels.repair_infohash_hint') %>"
+      <button type="button" onclick="startEpgMatch(this)"
+              title="<%= t('channels.epg_match_hint') %>"
               class="rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition px-3 py-1.5">
-        <%= t('channels.repair_infohash') %>
+        🎯 <%= t('channels.epg_match') %>
       </button>
     </div>
 
@@ -221,34 +226,271 @@
     manualSearchPlaceholder: <%- JSON.stringify(t('channels.manual_search_placeholder')) %>,
     manualSearchBtn: <%- JSON.stringify(t('channels.manual_search_btn')) %>,
     manualSearchEmpty: <%- JSON.stringify(t('channels.manual_search_empty')) %>,
-    repairConfirm: <%- JSON.stringify(t('channels.repair_infohash_confirm')) %>,
-    repairResult: <%- JSON.stringify(t('channels.repair_infohash_result')) %>,
-    repairBusy: <%- JSON.stringify(t('channels.repair_infohash_busy')) %>,
+    epgMatchRunning: <%- JSON.stringify(t('channels.epg_match_running')) %>,
+    epgMatchTitle: <%- JSON.stringify(t('channels.epg_match_title')) %>,
+    epgMatchDesc: <%- JSON.stringify(t('channels.epg_match_desc')) %>,
+    epgMatchWas: <%- JSON.stringify(t('channels.epg_match_was')) %>,
+    epgMatchNoMatch: <%- JSON.stringify(t('channels.epg_match_no_match')) %>,
+    epgMatchManualToggle: <%- JSON.stringify(t('channels.epg_match_manual_toggle')) %>,
+    epgMatchManualPlaceholder: <%- JSON.stringify(t('channels.epg_match_manual_placeholder')) %>,
+    epgMatchSearchBtn: <%- JSON.stringify(t('channels.epg_match_search_btn')) %>,
+    epgMatchManualEmpty: <%- JSON.stringify(t('channels.epg_match_manual_empty')) %>,
+    epgMatchNoneOption: <%- JSON.stringify(t('channels.epg_match_none_option')) %>,
+    epgMatchApplyCount: <%- JSON.stringify(t('channels.epg_match_apply_count')) %>,
+    epgMatchCancel: <%- JSON.stringify(t('channels.epg_match_cancel')) %>,
+    epgMatchDone: <%- JSON.stringify(t('channels.epg_match_done')) %>,
+    epgMatchEmpty: <%- JSON.stringify(t('channels.epg_match_empty')) %>,
+    epgMatchError: <%- JSON.stringify(t('channels.epg_match_error')) %>,
   };
 
   document.getElementById('select-all')?.addEventListener('change', function () {
     document.querySelectorAll('.channel-checkbox').forEach(function (cb) { cb.checked = this.checked; }.bind(this));
   });
 
-  // Ripara i canali importati dal catalogo quando l'infohash era stato
-  // salvato come content id (bug corretto in v3.11.0): lato server si
-  // prova solo sui canali non online, qui si mostra il riepilogo.
-  function repairInfohashIds(btn) {
-    if (!confirm(i18n.repairConfirm)) return;
+  // ---------- Matching in blocco canali ↔ EPG ----------
+  // Il bottone "Match EPG" usa i canali selezionati (checkbox) se ce ne
+  // sono, altrimenti tutti quelli elencati in pagina. Il lavoro gira lato
+  // server a piccoli batch (qui si mostra l'avanzamento); il risultato è
+  // SOLO una preview: ogni riga propone il miglior tvg-id trovato nell'EPG
+  // importato, correggibile dal dropdown (alternative) o dalla ricerca
+  // manuale. Niente viene salvato finché l'utente non preme Apply.
+
+  var epgMatchRows = [];
+
+  function epgMatchEsc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function startEpgMatch(btn) {
+    var checked = document.querySelectorAll('.channel-checkbox:checked');
+    var boxes = checked.length ? checked : document.querySelectorAll('.channel-checkbox');
+    var ids = Array.prototype.map.call(boxes, function (cb) { return parseInt(cb.value, 10); })
+      .filter(function (n) { return Number.isFinite(n); });
+    if (!ids.length) { alert(i18n.epgMatchEmpty); return; }
+
+    var panel = document.getElementById('epg-match-panel');
+    panel.classList.remove('hidden');
+    panel.innerHTML = '<p class="text-sm text-slate-400">' + i18n.epgMatchRunning.replace('{done}', '0').replace('{total}', String(ids.length)) + '</p>';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    epgMatchRows = [];
+    var done = 0;
+    var BATCH = 8;
+
+    (function next() {
+      if (done >= ids.length) { renderEpgMatchPreview(panel); return; }
+      var chunk = ids.slice(done, done + BATCH);
+      fetch('/channels/epg-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: chunk }),
+      })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          (data.results || []).forEach(function (r) { epgMatchRows.push(r); });
+          done += chunk.length;
+          panel.innerHTML = '<p class="text-sm text-slate-400">' + i18n.epgMatchRunning.replace('{done}', String(Math.min(done, ids.length))).replace('{total}', String(ids.length)) + '</p>';
+          next();
+        })
+        .catch(function (err) {
+          panel.innerHTML = '<p class="text-sm text-red-400">' + i18n.epgMatchError + ': ' + epgMatchEsc(err.message) + '</p>';
+        });
+    })();
+  }
+
+  function closeEpgMatch() {
+    var panel = document.getElementById('epg-match-panel');
+    panel.classList.add('hidden');
+    panel.innerHTML = '';
+    epgMatchRows = [];
+  }
+
+  function epgMatchOptionHtml(s, selected) {
+    var label = (s.displayName || s.tvgId || '?') + ' — ' + Math.round((s.score || 0) * 100) + '%';
+    return '<option value="s" data-tvgid="' + epgMatchEsc(s.tvgId || '') + '" data-logo="' + epgMatchEsc(s.logoUrl || '') + '"' + (selected ? ' selected' : '') + '>' + epgMatchEsc(label) + '</option>';
+  }
+
+  function renderEpgMatchPreview(panel) {
+    if (!epgMatchRows.length) {
+      panel.innerHTML = '<p class="text-sm text-slate-400">' + i18n.epgMatchEmpty + '</p>';
+      return;
+    }
+
+    var html = '';
+    html += '<div class="flex items-start justify-between gap-3 mb-3">';
+    html += '<div class="min-w-0"><h2 class="text-lg font-semibold">' + epgMatchEsc(i18n.epgMatchTitle) + '</h2>';
+    html += '<p class="text-xs text-slate-500 mt-0.5">' + epgMatchEsc(i18n.epgMatchDesc) + '</p></div>';
+    html += '<div class="flex items-center gap-2 flex-shrink-0">';
+    html += '<button type="button" id="epg-match-apply-btn" onclick="applyEpgMatch(this)" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-3 py-1.5 text-sm font-medium"></button>';
+    html += '<button type="button" onclick="closeEpgMatch()" class="rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition px-3 py-1.5 text-sm">' + epgMatchEsc(i18n.epgMatchCancel) + '</button>';
+    html += '</div></div>';
+
+    html += '<div class="grid gap-2">';
+    epgMatchRows.forEach(function (r, idx) {
+      var hasSuggestions = r.suggestions && r.suggestions.length;
+      html += '<div class="epg-match-row rounded-lg border border-slate-800 bg-slate-900/60 p-3" data-idx="' + idx + '">';
+      html += '<div class="flex items-center gap-3 flex-wrap">';
+      html += '<input type="checkbox" class="epg-match-include rounded bg-slate-950 border-slate-700 flex-shrink-0"' + (hasSuggestions ? ' checked' : '') + ' onchange="onEpgMatchIncludeChange(this)" title="' + epgMatchEsc(i18n.epgMatchDesc) + '" />';
+      html += '<div class="min-w-0 flex-1 basis-48">';
+      html += '<div class="font-medium text-sm truncate">' + epgMatchEsc(r.name) + '</div>';
+      if (r.currentTvgId) {
+        html += '<div class="text-xs text-slate-600 truncate">' + epgMatchEsc(i18n.epgMatchWas) + ': <span class="font-mono">' + epgMatchEsc(r.currentTvgId) + '</span></div>';
+      }
+      html += '</div>';
+      html += '<div class="flex items-center gap-2 flex-1 basis-80 min-w-0">';
+      html += '<img class="epg-match-logo w-7 h-7 rounded object-cover bg-slate-800 ring-1 ring-slate-700/60 flex-shrink-0 hidden" alt="" onerror="this.classList.add(\'hidden\')" />';
+      html += '<select class="epg-match-pick flex-1 min-w-0 rounded-lg bg-slate-950 border border-slate-800 px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-500" onchange="onEpgMatchPickChange(this)">';
+      if (hasSuggestions) {
+        r.suggestions.forEach(function (s, si) { html += epgMatchOptionHtml(s, si === 0); });
+      }
+      html += '<option value="" data-tvgid="" data-logo="">' + epgMatchEsc(i18n.epgMatchNoneOption) + '</option>';
+      html += '</select>';
+      html += '</div>';
+      html += '</div>';
+      // Riga 2: ricerca manuale nell'EPG (chiusa di default; aperta e con
+      // il testo "nessun match" quando il matching automatico non ha
+      // proposte per questo canale).
+      html += '<div class="mt-2">';
+      html += '<button type="button" class="epg-match-manual-toggle text-xs text-slate-500 hover:text-indigo-400 transition">🔍 ' + epgMatchEsc(hasSuggestions ? i18n.epgMatchManualToggle : i18n.epgMatchNoMatch) + '</button>';
+      html += '<div class="epg-match-manual-box' + (hasSuggestions ? ' hidden' : '') + ' mt-2">';
+      html += '<div class="flex gap-2">';
+      html += '<input type="text" class="epg-match-manual-input flex-1 rounded-lg bg-slate-950 border border-slate-800 px-2 py-1 text-xs focus:outline-none focus:border-indigo-500" placeholder="' + epgMatchEsc(i18n.epgMatchManualPlaceholder) + '" />';
+      html += '<button type="button" class="epg-match-manual-btn text-xs text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded border border-slate-800">' + epgMatchEsc(i18n.epgMatchSearchBtn) + '</button>';
+      html += '</div>';
+      html += '<div class="epg-match-manual-results mt-1.5 grid gap-1"></div>';
+      html += '</div>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    panel.innerHTML = html;
+
+    panel.querySelectorAll('.epg-match-row').forEach(function (rowEl) {
+      setupEpgMatchManualSearch(rowEl);
+      // Stato iniziale del pick (e del logo affianco): la prima proposta.
+      var sel = rowEl.querySelector('.epg-match-pick');
+      syncEpgMatchLogo(rowEl, sel);
+    });
+    updateEpgMatchApplyLabel();
+  }
+
+  function syncEpgMatchLogo(rowEl, sel) {
+    var img = rowEl.querySelector('.epg-match-logo');
+    var opt = sel.options[sel.selectedIndex];
+    var logo = opt ? (opt.dataset.logo || '') : '';
+    if (logo) {
+      img.src = logo;
+      img.classList.remove('hidden');
+    } else {
+      img.removeAttribute('src');
+      img.classList.add('hidden');
+    }
+  }
+
+  function onEpgMatchPickChange(sel) {
+    syncEpgMatchLogo(sel.closest('.epg-match-row'), sel);
+  }
+
+  function onEpgMatchIncludeChange() {
+    updateEpgMatchApplyLabel();
+  }
+
+  function updateEpgMatchApplyLabel() {
+    var btn = document.getElementById('epg-match-apply-btn');
+    if (!btn) return;
+    var count = document.querySelectorAll('.epg-match-include:checked').length;
+    btn.textContent = i18n.epgMatchApplyCount.replace('{count}', String(count));
+    btn.disabled = count === 0;
+    btn.classList.toggle('opacity-50', count === 0);
+  }
+
+  function setManualPick(rowEl, res) {
+    var sel = rowEl.querySelector('.epg-match-pick');
+    var old = sel.querySelector('option[data-manual="1"]');
+    if (old) old.remove();
+    var opt = document.createElement('option');
+    opt.value = 'manual';
+    opt.dataset.manual = '1';
+    opt.dataset.tvgid = res.tvgId || '';
+    opt.dataset.logo = res.logoUrl || '';
+    opt.textContent = '✓ ' + (res.displayName || res.tvgId || '?');
+    sel.appendChild(opt);
+    sel.value = 'manual';
+    syncEpgMatchLogo(rowEl, sel);
+  }
+
+  function setupEpgMatchManualSearch(rowEl) {
+    var input = rowEl.querySelector('.epg-match-manual-input');
+    var btn = rowEl.querySelector('.epg-match-manual-btn');
+    var toggle = rowEl.querySelector('.epg-match-manual-toggle');
+    var box = rowEl.querySelector('.epg-match-manual-box');
+    var resultsBox = rowEl.querySelector('.epg-match-manual-results');
+
+    if (toggle) toggle.addEventListener('click', function () { box.classList.toggle('hidden'); });
+
+    function run() {
+      var q = input.value.trim();
+      if (!q) return;
+      resultsBox.innerHTML = '<span class="text-xs text-slate-500">' + epgMatchEsc(i18n.loading) + '</span>';
+      fetch('/epg-channels/search?q=' + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var results = data.results || [];
+          if (!results.length) {
+            resultsBox.innerHTML = '<span class="text-xs text-slate-500">' + epgMatchEsc(i18n.epgMatchManualEmpty) + '</span>';
+            return;
+          }
+          resultsBox.innerHTML = '';
+          results.forEach(function (res) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'text-left text-xs text-indigo-400 hover:text-indigo-300 truncate';
+            b.textContent = (res.displayName || res.tvgId || '?') + '  (' + (res.tvgId || '') + ')';
+            b.addEventListener('click', function () { setManualPick(rowEl, res); });
+            resultsBox.appendChild(b);
+          });
+        })
+        .catch(function () {
+          resultsBox.innerHTML = '<span class="text-xs text-red-400">' + epgMatchEsc(i18n.error) + '</span>';
+        });
+    }
+    if (btn) btn.addEventListener('click', run);
+    if (input) input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); run(); } });
+  }
+
+  function applyEpgMatch(btn) {
+    var assignments = [];
+    document.querySelectorAll('.epg-match-row').forEach(function (rowEl) {
+      if (!rowEl.querySelector('.epg-match-include').checked) return;
+      var idx = parseInt(rowEl.dataset.idx, 10);
+      var sel = rowEl.querySelector('.epg-match-pick');
+      var opt = sel.options[sel.selectedIndex];
+      if (!opt) return;
+      assignments.push({
+        id: epgMatchRows[idx].id,
+        tvgId: opt.dataset.tvgid || '',
+        logoUrl: opt.dataset.logo || '',
+      });
+    });
+    if (!assignments.length) return;
+
     var original = btn.textContent;
     btn.disabled = true;
-    btn.textContent = i18n.repairBusy;
-    fetch('/channels/repair-infohash', { method: 'POST' })
-      .then(function (r) { return r.json(); })
-      .then(function (r) {
-        alert(i18n.repairResult
-          .replace('{checked}', r.checked)
-          .replace('{repaired}', r.repaired)
-          .replace('{failed}', r.failed));
+    btn.textContent = '…';
+    fetch('/channels/epg-match/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignments: assignments }),
+    })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (data) {
+        alert(i18n.epgMatchDone.replace('{count}', String(data.applied || 0)));
         window.location.reload();
       })
       .catch(function (err) {
-        alert('Errore: ' + err.message);
+        alert(i18n.epgMatchError + ': ' + err.message);
         btn.disabled = false;
         btn.textContent = original;
       });
