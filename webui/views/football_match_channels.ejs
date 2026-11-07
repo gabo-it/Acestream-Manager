@@ -45,7 +45,7 @@
 
   <div class="grid gap-3">
     <% results.forEach(function(r, i) { %>
-      <% const streamUrl = `${(acexyBaseUrl || '').replace(/\/$/, '')}/ace/getstream?id=${r.infohash}`; %>
+      <% const streamUrl = `/watch-direct?infohash=${r.infohash}&name=${encodeURIComponent(r.name)}`; %>
       <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-4 flex items-center gap-4">
         <input type="checkbox" class="mc-checkbox rounded bg-slate-950 border-slate-700 flex-shrink-0" data-index="<%= i %>" />
         <img src="<%= r.icon || 'https://placehold.co/64x64/1e293b/94a3b8?text=%20' %>"
@@ -64,9 +64,8 @@
           </div>
           <div class="text-xs text-slate-500 font-mono truncate"><%= r.infohash %></div>
           <div class="flex items-center gap-3 mt-2 text-xs">
-            <a href="/watch-direct?id=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
-            <a href="/vlc-direct.m3u?id=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
-            <a href="acestream://<%= r.infohash %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.aceplayer') %></a>
+            <a href="/watch-direct?infohash=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.http') %></a>
+            <a href="/vlc-direct.m3u?infohash=<%= r.infohash %>&name=<%= encodeURIComponent(r.name) %>" class="text-slate-400 hover:text-indigo-400 transition"><%= t('channels.vlc') %></a>
             <button type="button" onclick="copyMcLink('<%= streamUrl %>', this)" class="text-slate-400 hover:text-indigo-400 transition">
               <%= t('channels.copy_link') %>
             </button>
@@ -77,6 +76,7 @@
           <input type="hidden" name="infohash" value="<%= r.infohash %>" />
           <input type="hidden" name="category" value="<%= r.categories %>" />
           <input type="hidden" name="logo_url" value="<%= r.icon %>" />
+          <input type="hidden" name="id_kind" value="infohash" />
           <button class="text-sm text-indigo-400 hover:text-indigo-300 transition px-3 py-1.5 rounded-lg border border-slate-800">
             <%= t('search.add') %>
           </button>
@@ -96,7 +96,8 @@
   var mcMatchUrl = <%- JSON.stringify(matchUrl || '') %>;
 
   function copyMcLink(url, btn) {
-    copyToClipboard(url).then(function () {
+    var full = url.indexOf('/') === 0 ? window.location.origin + url : url;
+    copyToClipboard(full).then(function () {
       var original = btn.textContent;
       btn.textContent = <%- JSON.stringify(t('channels.copied')) %>;
       setTimeout(function () { btn.textContent = original; }, 1500);

@@ -60,4 +60,27 @@ async function searchAceStream(query, { page = 0, pageSize = 30, category = '' }
   return { total: data.result?.total ?? flat.length, results: flat };
 }
 
-module.exports = { searchAceStream, CATEGORIES };
+// I risultati della ricerca identificano gli stream con l'INFOHASH, ma il
+// motore riproduce solo via content id (?id=...): le due cose NON sono la
+// stessa cosa (docs.acestream.net/developers/api-reference, get_content_id;
+// era la causa dei "canali trovati via API sempre giù" — si salvava
+// l'infohash al posto del content id e nessuno stream partiva). Questo
+// lookup usa l'API ufficiale del motore per risolvere infohash → content
+// id PRIMA di salvare o riprodurre: non avvia alcuna riproduzione, è una
+// richiesta locale leggerissima. Fallisce (throw) se il motore non
+// riconosce l'infohash — segno che lo stream è morto o sconosciuto.
+async function resolveContentId(infohash) {
+  const base = getEngineBaseUrl();
+  const res = await fetch(
+    `${base}/server/api?api_version=3&method=get_content_id&infohash=${encodeURIComponent(infohash)}`,
+    { signal: AbortSignal.timeout(8000) }
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  const cid = data.result?.content_id;
+  if (!cid || !/^[a-fA-F0-9]{40}$/.test(cid)) throw new Error('no content id in engine response');
+  return cid.toLowerCase();
+}
+
+module.exports = { searchAceStream, resolveContentId, CATEGORIES };

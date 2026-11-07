@@ -10,7 +10,7 @@ const { scrapeUrl, importChannels, refreshSource, refreshAllSources, refreshDueS
 const { parseM3U } = require('./m3u');
 const { checkAndStore, checkAllChannels } = require('./statuscheck');
 const { getEngineParams, getEngineBaseUrl } = require('./engineConfig');
-const { searchAceStream, CATEGORIES } = require('./search');
+const { searchAceStream, resolveContentId, CATEGORIES } = require('./search');
 const { getTranslator } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
 const { getCachedTranslations } = require('./translator');
@@ -759,9 +759,22 @@ app.get('/watch/:id', (req, res) => {
 
 // Come /watch/:id ma per contenuti non ancora salvati come canale (es. un
 // risultato del tab Cerca su cui l'utente vuole solo provare la riproduzione).
-app.get('/watch-direct', (req, res) => {
-  const acestreamId = (req.query.id || '').trim();
+app.get('/watch-direct', async (req, res) => {
   const name = (req.query.name || 'Stream').trim();
+  let acestreamId = (req.query.id || '').trim();
+  // I risultati del catalogo arrivano come INFOHASH (param ?infohash=):
+  // il motore riproduce solo via content id, quindi si risolve prima di
+  // montare la pagina. Un infohash che il motore non riconosce = stream
+  // morto: messaggio esplicito invece del player che gira a vuoto.
+  const infohash = (req.query.infohash || '').trim();
+  if (infohash) {
+    if (!/^[a-fA-F0-9]{40}$/.test(infohash)) return res.status(400).send(reqT()('errors.invalid_acestream_id'));
+    try {
+      acestreamId = await resolveContentId(infohash);
+    } catch (err) {
+      return res.status(502).send(`${reqT()('errors.resolve_failed')} (${err.message})`);
+    }
+  }
   if (!/^[a-fA-F0-9]{40}$/.test(acestreamId)) return res.status(400).send(reqT()('errors.invalid_acestream_id'));
   const { tsUrl, tsProxyUrl } = buildStreamUrls(req, acestreamId);
   // alternates: [] serve — il template watch.ejs fa riferimento alla
@@ -793,9 +806,21 @@ app.get('/channels/:id/vlc.m3u', (req, res) => {
   sendSingleChannelM3U(res, channel.name, channel.acestream_id, tsUrl);
 });
 
-app.get('/vlc-direct.m3u', (req, res) => {
-  const acestreamId = (req.query.id || '').trim();
+app.get('/vlc-direct.m3u', async (req, res) => {
   const name = (req.query.name || 'Stream').trim();
+  let acestreamId = (req.query.id || '').trim();
+  // Come per /watch-direct: dal catalogo arriva un infohash, si risolve
+  // al content id prima di generare il file (nel .m3u deve finire un URL
+  // che il motore sappia davvero riprodurre).
+  const infohash = (req.query.infohash || '').trim();
+  if (infohash) {
+    if (!/^[a-fA-F0-9]{40}$/.test(infohash)) return res.status(400).send(reqT()('errors.invalid_acestream_id'));
+    try {
+      acestreamId = await resolveContentId(infohash);
+    } catch (err) {
+      return res.status(502).send(`${reqT()('errors.resolve_failed')} (${err.message})`);
+    }
+  }
   if (!/^[a-fA-F0-9]{40}$/.test(acestreamId)) return res.status(400).send(reqT()('errors.invalid_acestream_id'));
   const { tsUrl } = buildStreamUrls(req, acestreamId);
   sendSingleChannelM3U(res, name, acestreamId, tsUrl);
@@ -1049,6 +1074,7 @@ app.get('/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   const category = (req.query.category || '').trim();
   const directId = parseDirectStreamId(q);
+  const resolveFailed = req.query.resolve_failed === '1';
   let results = [];
   let error = null;
   if (directId) {
@@ -1062,32 +1088,98 @@ app.get('/search', async (req, res) => {
     }
   }
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
-  render(res, 'search', { titleKey: 'search.title', q, category, results, error, categories: CATEGORIES, acexyBaseUrl, directId });
+  render(res, 'search', { titleKey: 'search.title', q, category, results, error, categories: CATEGORIES, acexyBaseUrl, directId, resolveFailed });
 });
 
-app.post('/search/import', (req, res) => {
-  const { name, infohash, category, logo_url } = req.body;
-  if (infohash) {
+// Il campo nascosto id_kind distingue la provenienza: i risultati del
+// catalogo portano un INFOHASH (da risolvere al content id prima di
+// salvare — salvarlo tale e quale era il bug "canali trovati via API
+// sempre giù"); la scheda "stream diretto" porta un ID incollato che si
+// tratta come content id, com'era nella v3.10.0.
+app.post('/search/import', async (req, res) => {
+  const { name, infohash, category, logo_url, id_kind } = req.body;
+  if (infohash && /^[a-fA-F0-9]{40}$/.test(infohash)) {
+    let acestreamId = infohash.toLowerCase();
+    if (id_kind === 'infohash') {
+      try {
+        acestreamId = await resolveContentId(acestreamId);
+      } catch (err) {
+        // Non salviamo un id non riproducibile: si torna alla ricerca
+        // con il banner esplicativo.
+        return res.redirect(`/search?q=${encodeURIComponent(infohash)}&resolve_failed=1`);
+      }
+    }
     importChannels(
-      [{ name: name || `Canale ${infohash.slice(0, 8)}`, acestream_id: infohash.toLowerCase(), category, logo_url }],
+      [{ name: name || `Canale ${acestreamId.slice(0, 8)}`, acestream_id: acestreamId, category, logo_url }],
       null
     );
   }
   res.redirect('/channels');
 });
 
-app.post('/search/import-selected', (req, res) => {
+app.post('/search/import-selected', async (req, res) => {
   const selected = Array.isArray(req.body.results) ? req.body.results : [];
-  const rows = selected
+  const candidates = selected
     .filter((r) => r && /^[a-fA-F0-9]{40}$/.test(r.infohash))
     .map((r) => ({
       name: String(r.name || `Canale ${r.infohash.slice(0, 8)}`).slice(0, 200),
-      acestream_id: r.infohash.toLowerCase(),
+      infohash: r.infohash.toLowerCase(),
       category: r.category || '',
       logo_url: r.logo_url || '',
     }));
+
+  // Risoluzione in parallelo: ogni infohash deve diventare un content id
+  // PRIMA di entrare in DB (vedi /search/import). Quelli che il motore
+  // non riconosce si scartano e si dichiarano — un canale morto in lista
+  // è peggio di un canale mancante.
+  const settled = await Promise.allSettled(
+    candidates.map((r) => resolveContentId(r.infohash))
+  );
+  const rows = [];
+  let failed = 0;
+  settled.forEach((s, i) => {
+    if (s.status === 'fulfilled') rows.push({ ...candidates[i], acestream_id: s.value });
+    else failed += 1;
+  });
   if (rows.length) importChannels(rows, null);
-  res.json({ imported: rows.length });
+  res.json({ imported: rows.length, failed });
+});
+
+// Riparazione dei canali importati dal catalogo PRIMA della v3.11.0: lì
+// l'infohash finiva nel DB come se fosse un content id, e quei canali non
+// partivano mai. Si riprova solo sui canali NON online (uno stream che
+// va online col suo id è chiaramente già corretto); per ciascuno si
+// chiede all'engine il content id e, se risponde con uno diverso, si
+// sostituisce. L'engine risponde con errore per i veri content id (non
+// sono infohash noti): finiscono in "failed" e non vengono toccati.
+app.post('/channels/repair-infohash', async (req, res) => {
+  const rows = db.prepare("SELECT id, acestream_id FROM channels WHERE status != 'online'").all();
+  let repaired = 0;
+  let unchanged = 0;
+  let failed = 0;
+  for (const ch of rows) {
+    try {
+      const cid = await resolveContentId(ch.acestream_id);
+      if (!cid || cid === ch.acestream_id) {
+        unchanged += 1;
+        continue;
+      }
+      // Un altro canale ha già questo content id? È un duplicato che
+      // punta alla stessa stream già corretta: non si tocca (il valore
+      // corretto c'è già, e cancellarlo di nascosto non è compito della
+      // riparazione — resta il bulk-delete per i duplicati veri e propri).
+      const dup = db.prepare('SELECT id FROM channels WHERE acestream_id = ? AND id != ?').get(cid, ch.id);
+      if (dup) {
+        unchanged += 1;
+        continue;
+      }
+      db.prepare('UPDATE channels SET acestream_id = ? WHERE id = ?').run(cid, ch.id);
+      repaired += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  res.json({ checked: rows.length, repaired, unchanged, failed });
 });
 
 // ---------- Statistiche stream ----------
