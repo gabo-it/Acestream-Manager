@@ -63,6 +63,29 @@ CREATE TABLE IF NOT EXISTS watch_history (
   watched_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_watch_history_channel_time ON watch_history (channel_id, watched_at DESC);
+
+-- Una riga per ogni verifica stato (programmata o manuale) di ogni canale:
+-- da qui nasce la percentuale di uptime per canale nella pagina Health.
+CREATE TABLE IF NOT EXISTS channel_status_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  checked_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_status_history_channel_time ON channel_status_history (channel_id, checked_at DESC);
+
+-- Cronologia dei job in background (refresh EPG, controllo canali,
+-- auto-refresh sorgenti, indice calcio): una riga per esecuzione, con
+-- esito, dettaglio e durata — la tabella "Job history" della pagina Health.
+CREATE TABLE IF NOT EXISTS job_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ok',
+  detail TEXT DEFAULT '',
+  started_at TEXT DEFAULT (datetime('now')),
+  duration_ms INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_job_runs_time ON job_runs (started_at DESC);
 `);
 
 // --- Migrazione automatica per database creati con schemi precedenti ---
@@ -143,6 +166,94 @@ function getRecentlyWatched(limit = 6) {
     .all(limit);
 }
 
+// ---------- Storico stato canali e job ----------
+
+// Quante verifiche tenere per canale: con il check giornaliero sono due
+// mesi di storia, con check orari almeno un paio di giorni densi. Pruning
+// per canale a ogni inserimento: la tabella non cresce oltre il tetto.
+const STATUS_HISTORY_PER_CHANNEL = 60;
+
+function addStatusHistory(channelId, status) {
+  db.prepare('INSERT INTO channel_status_history (channel_id, status) VALUES (?, ?)').run(channelId, status);
+  db.prepare(
+    `DELETE FROM channel_status_history WHERE channel_id = ? AND id NOT IN (
+       SELECT id FROM channel_status_history WHERE channel_id = ? ORDER BY id DESC LIMIT ?
+     )`
+  ).run(channelId, channelId, STATUS_HISTORY_PER_CHANNEL);
+}
+
+// Affidabilità per canale sulla finestra conservata: conteggio verifiche,
+// quante online, ultima verifica. Uptime in percentuale arrotondata;
+// i tempi tornano in epoch ms (stessa conversione di getRecentlyWatched).
+function getStatusStats() {
+  const rows = db
+    .prepare(
+      `SELECT channel_id,
+              COUNT(*) AS checks,
+              SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) AS online_count,
+              CAST(strftime('%s', MAX(checked_at)) AS INTEGER) * 1000 AS last_check_ms
+       FROM channel_status_history
+       GROUP BY channel_id`
+    )
+    .all();
+  const map = new Map();
+  for (const r of rows) {
+    map.set(r.channel_id, {
+      checks: r.checks,
+      onlineCount: r.online_count || 0,
+      uptimePct: r.checks ? Math.round((100 * (r.online_count || 0)) / r.checks) : null,
+      lastCheckMs: r.last_check_ms || null,
+    });
+  }
+  return map;
+}
+
+// Registro di basso livello: una riga per esecuzione di un job.
+function recordJobRun(job, status, detail = '', durationMs = 0) {
+  try {
+    db.prepare('INSERT INTO job_runs (job, status, detail, duration_ms) VALUES (?, ?, ?, ?)').run(
+      job,
+      status,
+      String(detail || '').slice(0, 500),
+      Math.max(0, Math.round(durationMs))
+    );
+    db.prepare(
+      `DELETE FROM job_runs WHERE id NOT IN (SELECT id FROM job_runs ORDER BY id DESC LIMIT 300)`
+    ).run();
+  } catch (err) {
+    // La registrazione di un job non deve mai far fallire il job stesso.
+    console.error('[jobs] record failed:', err.message);
+  }
+}
+
+// Esegue fn() registrando esito, dettaglio e durata. fn può restituire
+// una stringa (o {detail, warnings}) come dettaglio dell'esito positivo;
+// un'eccezione diventa una riga 'error' e viene ri-lanciata: chi chiama
+// decide cosa farne (le rotte HTTP di solito la loggano e vanno avanti).
+async function runJob(job, fn) {
+  const startedAt = Date.now();
+  try {
+    const result = await fn();
+    const detail = typeof result === 'object' && result !== null && 'detail' in result ? result.detail : result;
+    const warnings = typeof result === 'object' && result !== null && result.warnings ? result.warnings : 0;
+    recordJobRun(job, warnings ? 'partial' : 'ok', detail, Date.now() - startedAt);
+    return result;
+  } catch (err) {
+    recordJobRun(job, 'error', err.message, Date.now() - startedAt);
+    throw err;
+  }
+}
+
+function getJobRuns(limit = 60) {
+  return db
+    .prepare(
+      `SELECT job, status, detail, duration_ms,
+              CAST(strftime('%s', started_at) AS INTEGER) * 1000 AS started_ms
+       FROM job_runs ORDER BY id DESC LIMIT ?`
+    )
+    .all(limit);
+}
+
 function getSetting(key, fallback = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value : fallback;
@@ -163,4 +274,9 @@ module.exports = {
   getFavoriteChannelIds,
   recordWatch,
   getRecentlyWatched,
+  addStatusHistory,
+  getStatusStats,
+  recordJobRun,
+  runJob,
+  getJobRuns,
 };

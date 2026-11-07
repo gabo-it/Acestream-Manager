@@ -54,7 +54,7 @@
     <% } else { %>
       <div class="grid gap-2 sm:grid-cols-2">
         <% favoriteMatch.matches.slice(0, 4).forEach(function(m) { %>
-          <a href="/football/match?url=<%= encodeURIComponent(m.url) %>" class="rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5 flex items-center justify-between gap-2 min-w-0">
+          <a href="/football/match?url=<%= encodeURIComponent(m.url) %>&teams=<%= encodeURIComponent(m.title || '') %>" class="rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5 flex items-center justify-between gap-2 min-w-0">
             <span class="min-w-0">
               <span class="block text-sm font-medium truncate"><%= m.title %></span>
               <% if (m.competition) { %><span class="block text-xs text-slate-500 truncate"><%= m.competition %></span><% } %>

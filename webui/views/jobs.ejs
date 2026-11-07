@@ -1,0 +1,100 @@
+<h1 class="text-2xl font-bold mb-2"><%= t('health.title') %></h1>
+<p class="text-sm text-slate-400 mb-6"><%= t('health.subtitle') %></p>
+
+<h2 class="text-lg font-semibold mb-3"><%= t('health.jobs_title') %></h2>
+<% if (runs.length) { %>
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 overflow-x-auto mb-8">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-slate-500 border-b border-slate-800 bg-slate-900/60">
+          <th class="py-2 px-4 whitespace-nowrap"><%= t('health.when') %></th>
+          <th class="py-2 px-4"><%= t('health.job') %></th>
+          <th class="py-2 px-4"><%= t('health.status') %></th>
+          <th class="py-2 px-4"><%= t('health.detail') %></th>
+          <th class="py-2 px-4 whitespace-nowrap"><%= t('health.duration') %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% runs.forEach(function(r) { %>
+          <tr class="border-b border-slate-700/60 last:border-0">
+            <td class="py-2 px-4 text-slate-400 whitespace-nowrap" data-ts="<%= r.started_ms %>"><%= new Date(r.started_ms).toISOString().slice(0, 16).replace('T', ' ') %></td>
+            <td class="py-2 px-4 text-slate-200"><%= t('health.job_' + r.job) %></td>
+            <td class="py-2 px-4">
+              <span class="inline-block rounded-full px-2 py-0.5 text-xs font-medium <%= r.status === 'ok' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : (r.status === 'partial' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-red-950 text-red-300 border border-red-800') %>">
+                <%= t('health.status_' + r.status) %>
+              </span>
+            </td>
+            <td class="py-2 px-4 text-slate-400"><%= r.detail || '—' %></td>
+            <td class="py-2 px-4 text-slate-500 whitespace-nowrap"><%= r.duration_ms < 1000 ? r.duration_ms + ' ms' : (r.duration_ms / 1000).toFixed(1) + ' s' %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+<% } else { %>
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400 mb-8">
+    <%= t('health.no_runs') %>
+  </div>
+<% } %>
+
+<h2 class="text-lg font-semibold mb-1"><%= t('health.reliability_title') %></h2>
+<p class="text-sm text-slate-400 mb-3"><%= t('health.reliability_subtitle') %></p>
+<% if (channels.length) { %>
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-slate-500 border-b border-slate-800 bg-slate-900/60">
+          <th class="py-2 px-4"><%= t('health.col_channel') %></th>
+          <th class="py-2 px-4 whitespace-nowrap"><%= t('health.col_now') %></th>
+          <th class="py-2 px-4 whitespace-nowrap"><%= t('health.col_checks') %></th>
+          <th class="py-2 px-4 w-1/3"><%= t('health.col_uptime') %></th>
+          <th class="py-2 px-4 whitespace-nowrap"><%= t('health.col_last_check') %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% channels.forEach(function(ch) { %>
+          <tr class="border-b border-slate-700/60 last:border-0">
+            <td class="py-2 px-4">
+              <div class="flex items-center gap-2 min-w-0">
+                <% if (ch.logo_url) { %>
+                  <img src="<%= ch.logo_url %>" alt="" class="w-6 h-6 rounded object-contain bg-slate-900 flex-shrink-0" onerror="this.style.display='none'" />
+                <% } %>
+                <span class="truncate"><%= ch.name %></span>
+              </div>
+            </td>
+            <td class="py-2 px-4">
+              <span class="inline-block w-2.5 h-2.5 rounded-full <%= ch.status === 'online' ? 'bg-emerald-500' : (ch.status === 'offline' ? 'bg-red-500' : 'bg-slate-600') %>"
+                    title="<%= ch.status %>"></span>
+            </td>
+            <td class="py-2 px-4 text-slate-400"><%= ch.checks || '—' %></td>
+            <td class="py-2 px-4">
+              <% if (ch.uptimePct === null || ch.uptimePct === undefined) { %>
+                <span class="text-slate-500"><%= t('health.no_data') %></span>
+              <% } else { %>
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 h-1.5 rounded-full bg-slate-700 overflow-hidden min-w-[80px]">
+                    <div class="h-full <%= ch.uptimePct >= 80 ? 'bg-emerald-500' : (ch.uptimePct >= 30 ? 'bg-amber-500' : 'bg-red-500') %>" style="width: <%= ch.uptimePct %>%;"></div>
+                  </div>
+                  <span class="<%= ch.uptimePct === 0 ? 'text-red-400 font-medium' : 'text-slate-300' %> whitespace-nowrap"><%= ch.uptimePct %>%<%= ch.uptimePct === 0 ? ' · ' + t('health.dead') : '' %></span>
+                </div>
+              <% } %>
+            </td>
+            <td class="py-2 px-4 text-slate-400 whitespace-nowrap" data-ts="<%= ch.lastCheckMs %>"><%= ch.lastCheckMs ? new Date(ch.lastCheckMs).toISOString().slice(0, 16).replace('T', ' ') : '—' %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+<% } else { %>
+  <div class="rounded-xl border border-slate-800 bg-slate-800/60 p-8 text-center text-slate-400">
+    <%= t('health.no_channels') %>
+  </div>
+<% } %>
+
+<script>
+  // Le date partono in UTC (epoch ms) e vengono mostrate nel fuso del browser.
+  document.querySelectorAll('[data-ts]').forEach(function (el) {
+    var ts = parseInt(el.dataset.ts, 10);
+    if (ts) el.textContent = new Date(ts).toLocaleString('en-US');
+  });
+</script>

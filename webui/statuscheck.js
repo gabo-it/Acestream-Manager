@@ -1,4 +1,4 @@
-const { getSetting, db } = require('./db');
+const { getSetting, db, addStatusHistory } = require('./db');
 
 // Verifica se un canale è raggiungibile chiedendo i primi byte dello stream
 // ad acexy con un timeout breve. Euristico: se risponde entro il timeout
@@ -35,17 +35,25 @@ async function checkAndStore(channel) {
     status,
     channel.id
   );
+  // Ogni verifica finisce anche nello storico: è la materia prima della
+  // percentuale di uptime nella pagina Health (tenute le ultime 60 per canale).
+  try {
+    addStatusHistory(channel.id, status);
+  } catch (err) {
+    console.error('[status] history insert failed:', err.message);
+  }
   return status;
 }
 
 async function checkAllChannels() {
   const channels = db.prepare('SELECT * FROM channels').all();
   let online = 0;
+  const startedAt = Date.now();
   for (const ch of channels) {
     const status = await checkAndStore(ch);
     if (status === 'online') online += 1;
   }
-  return { total: channels.length, online };
+  return { total: channels.length, online, durationMs: Date.now() - startedAt };
 }
 
 module.exports = { checkChannelStatus, checkAndStore, checkAllChannels };

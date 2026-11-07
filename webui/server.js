@@ -3,7 +3,7 @@ require('./errorLog').install();
 const express = require('express');
 const multer = require('multer');
 const cron = require('node-cron');
-const { db, getSetting, setSetting, toggleFavoriteChannel, getFavoriteChannelIds, recordWatch, getRecentlyWatched } = require('./db');
+const { db, getSetting, setSetting, toggleFavoriteChannel, getFavoriteChannelIds, recordWatch, getRecentlyWatched, getStatusStats, runJob, getJobRuns } = require('./db');
 const { refreshEpg, getNowNext, getSourceStats } = require('./epg');
 const { buildM3U, buildXmltv } = require('./playlist');
 const { scrapeUrl, importChannels, refreshSource, refreshAllSources, refreshDueSources } = require('./scraper');
@@ -15,7 +15,7 @@ const { getTranslator } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
 const { getCachedTranslations } = require('./translator');
 const { suggestTvgIds, suggestLogosFromSearch } = require('./suggestions');
-const { searchTeams, getTeamMatches, getUpcomingTeamMatches, getBroadcastersByCountry, parseTeamUrl, refreshTeamIndex, getFootballDiagnostics } = require('./football');
+const { searchTeams, getTeamMatches, getUpcomingTeamMatches, getBroadcastersByCountry, parseTeamUrl, getMatchTitle, refreshTeamIndex, getFootballDiagnostics } = require('./football');
 
 // Formatta un kickoff epoch nel fuso del server (self-hosted = fuso dell'utente).
 function formatKickoff(epoch) {
@@ -564,7 +564,12 @@ app.post('/channels/:id/check-status', async (req, res) => {
 
 app.post('/channels/check-all', async (req, res) => {
   try {
-    await checkAllChannels();
+    // Il job logga anche la pagina Health (esito + "X/Y online"); le
+    // singole verifiche finiscono comunque nello storico affidabilità.
+    await runJob('channels_check', async () => {
+      const out = await checkAllChannels();
+      return { detail: `${out.online}/${out.total} online` };
+    });
     setSetting('channels_last_check_all_at', String(Date.now()));
   } catch (err) {
     console.error('[status] bulk check error:', err.message);
@@ -729,16 +734,25 @@ app.get('/watch/:id', (req, res) => {
   // Stream alternativi: altri canali collegati alla stessa identità TV
   // (stesso tvg_id) — proposti dalla pagina solo se la riproduzione
   // fallisce, come via di fuga manuale o automatica. Ordinati con gli
-  // online prima, così il failover automatico prova prima il più probabile.
-  const alternates = channel.tvg_id
-    ? db
-        .prepare(
-          `SELECT id, name, logo_url, status FROM channels
-           WHERE tvg_id = ? AND id != ?
-           ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'unknown' THEN 1 ELSE 2 END, sort_order, name COLLATE NOCASE`
-        )
-        .all(channel.tvg_id, channel.id)
-    : [];
+  // online prima, poi per affidabilità misurata (uptime storico), così
+  // il failover automatico prova prima il più probabile.
+  let alternates = [];
+  if (channel.tvg_id) {
+    const rows = db
+      .prepare(
+        `SELECT id, name, logo_url, status FROM channels
+         WHERE tvg_id = ? AND id != ?`
+      )
+      .all(channel.tvg_id, channel.id);
+    const stats = getStatusStats();
+    const rank = { online: 0, unknown: 1, offline: 2 };
+    alternates = rows.sort(
+      (a, b) =>
+        (rank[a.status] ?? 1) - (rank[b.status] ?? 1) ||
+        (stats.get(b.id)?.uptimePct ?? -1) - (stats.get(a.id)?.uptimePct ?? -1) ||
+        a.name.localeCompare(b.name)
+    );
+  }
   const { tsUrl, tsProxyUrl } = buildStreamUrls(req, channel.acestream_id);
   render(res, 'watch', { title: channel.name, channel, streamUrl: tsUrl, tsProxyUrl, alternates, embed: req.query.embed === '1' });
 });
@@ -878,7 +892,10 @@ app.post('/sources/epg', (req, res) => {
 
 app.post('/sources/epg/refresh', async (req, res) => {
   try {
-    await refreshEpg();
+    await runJob('epg_refresh', async () => {
+      const r = await refreshEpg();
+      return { detail: `${r.imported} programs from ${r.sources} sources`, warnings: (r.errors || []).length };
+    });
   } catch (err) {
     console.error(err);
   }
@@ -918,7 +935,10 @@ app.post('/sources/:id/refresh', async (req, res) => {
   const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(req.params.id);
   if (source) {
     try {
-      await refreshSource(source);
+      await runJob('sources_refresh', async () => {
+        await refreshSource(source);
+        return { detail: source.url };
+      });
     } catch (err) {
       console.error('[sources] refresh failed:', err.message);
     }
@@ -966,7 +986,10 @@ app.post('/sources/:id/import-selected', (req, res) => {
 
 app.post('/sources/refresh-all', async (req, res) => {
   try {
-    await refreshAllSources();
+    await runJob('sources_refresh', async () => {
+      const n = await refreshAllSources();
+      return { detail: `${n} sources refreshed` };
+    });
   } catch (err) {
     console.error('[sources] refresh-all failed:', err.message);
   }
@@ -1301,7 +1324,11 @@ app.get('/football', async (req, res) => {
 // Ricostruzione manuale dell'indice squadre (bottone sulla pagina Football).
 app.post('/football/index/refresh', async (req, res) => {
   try {
-    await refreshTeamIndex();
+    await runJob('football_index', async () => {
+      await refreshTeamIndex();
+      const d = getFootballDiagnostics();
+      return { detail: `${d.teamIndexSize} teams indexed` };
+    });
   } catch (err) {
     console.error('[football] manual index refresh failed:', err.message);
   }
@@ -1432,6 +1459,99 @@ app.get('/football/match', async (req, res) => {
     });
   }
   render(res, 'football_match', { titleKey: 'football.broadcasters_title', matchUrl, coverage: coverageWithMatches, error });
+});
+
+// Ricerca canali per una partita: usa il titolo ("A vs B") per interrogare
+// l'API di ricerca AceStream e proporre i canali da importare — il
+// complemento di "In your playlist", che mostra solo ciò che si ha già.
+app.get('/football/match/channels', async (req, res) => {
+  const matchUrl = (req.query.url || '').trim();
+  let title = (req.query.teams || '').trim();
+  let error = null;
+
+  // Il titolo arriva normalmente dal link (football.ejs lo conosce);
+  // se manca (link condiviso a mano) lo si scrapa dalla pagina match.
+  if (!title && matchUrl) {
+    try {
+      title = await getMatchTitle(matchUrl);
+    } catch (err) {
+      // Nessun titolo: si può comunque cercare a mano dalla pagina Cerca.
+    }
+  }
+
+  // Query: "A vs B" per prima, poi le due squadre da sole. Se il titolo
+  // non è nel formato atteso si usa tutto come unica query.
+  const vsParts = title.split(/\s+vs\.?\s+/i).map((s) => s.trim()).filter(Boolean);
+  const queries = [];
+  const pushQuery = (q) => {
+    q = q.replace(/\s+/g, ' ').trim();
+    if (q && q.length >= 3 && !queries.some((x) => x.toLowerCase() === q.toLowerCase())) queries.push(q);
+  };
+  if (vsParts.length === 2) {
+    pushQuery(`${vsParts[0]} ${vsParts[1]}`);
+    vsParts.forEach(pushQuery);
+  } else {
+    pushQuery(title);
+  }
+  queries.splice(3);
+
+  let results = [];
+  let failedQueries = 0;
+  for (const q of queries) {
+    try {
+      const data = await searchAceStream(q, { pageSize: 20 });
+      results.push(...data.results.map((r) => ({ ...r, query: q })));
+    } catch (err) {
+      failedQueries += 1;
+    }
+  }
+
+  // Dedup per infohash (la stessa stream emerge da più query) e ranking:
+  // prima quelle il cui nome cita una delle due squadre, poi le altre.
+  const seen = new Map();
+  for (const r of results) {
+    if (!r.infohash) continue;
+    const prev = seen.get(r.infohash);
+    if (!prev) seen.set(r.infohash, r);
+  }
+  const tokens = vsParts.map((t) => t.toLowerCase().slice(0, 6));
+  const merged = [...seen.values()].map((r) => ({
+    ...r,
+    relevant: tokens.some((tk) => (r.name || '').toLowerCase().includes(tk)),
+  }));
+  merged.sort((a, b) => Number(b.relevant) - Number(a.relevant) || (b.status === 2) - (a.status === 2));
+
+  if (!queries.length) error = 'no-title';
+  else if (failedQueries === queries.length) error = 'search-unavailable';
+
+  const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
+  render(res, 'football_match_channels', {
+    titleKey: 'football.find_channels_title',
+    matchUrl,
+    matchTitle: title,
+    queries,
+    results: merged,
+    error,
+    acexyBaseUrl,
+  });
+});
+
+// ---------- Health (cronologia job + affidabilità canali) ----------
+
+app.get('/jobs', (req, res) => {
+  const runs = getJobRuns(60);
+  const stats = getStatusStats();
+  const channels = db
+    .prepare('SELECT id, name, logo_url, status, last_checked_at FROM channels')
+    .all()
+    .map((ch) => ({ ...ch, ...(stats.get(ch.id) || { checks: 0, onlineCount: 0, uptimePct: null, lastCheckMs: null }) }));
+  // Prima i più fragili (offline cronico), poi i mai verificati, poi i sani.
+  channels.sort((a, b) => {
+    const ua = a.uptimePct === null ? 101 : a.uptimePct;
+    const ub = b.uptimePct === null ? 101 : b.uptimePct;
+    return ua - ub || a.name.localeCompare(b.name);
+  });
+  render(res, 'jobs', { titleKey: 'health.title', runs, channels });
 });
 
 // ---------- Impostazioni ----------
@@ -1664,19 +1784,28 @@ function scheduleEpgRefresh() {
   const hours = Math.max(1, Math.min(24, parseInt(getSetting('epg_refresh_hours', '6'), 10) || 6));
   if (epgCronTask) epgCronTask.stop();
   epgCronTask = cron.schedule(`0 */${hours} * * *`, () => {
-    refreshEpg().catch((err) => console.error('[epg] refresh failed:', err));
+    runJob('epg_refresh', async () => {
+      const r = await refreshEpg();
+      return { detail: `${r.imported} programs from ${r.sources} sources`, warnings: (r.errors || []).length };
+    }).catch((err) => console.error('[epg] refresh failed:', err));
   });
   console.log(`[epg] refresh scheduled every ${hours}h`);
 }
 
 scheduleEpgRefresh();
-refreshEpg().catch((err) => console.error('[epg] initial refresh failed:', err));
+runJob('epg_refresh', async () => {
+  const r = await refreshEpg();
+  return { detail: `${r.imported} programs from ${r.sources} sources`, warnings: (r.errors || []).length };
+}).catch((err) => console.error('[epg] initial refresh failed:', err));
 
 // Controlla ogni ora quali sorgenti con auto-refresh impostato sono "dovute"
 // secondo il proprio intervallo individuale (ognuna il suo, non un unico
 // intervallo globale). Le sorgenti manuali non vengono mai toccate qui.
 cron.schedule('7 * * * *', () => {
-  refreshDueSources().catch((err) => console.error('[sources] auto-refresh failed:', err));
+  runJob('sources_refresh', async () => {
+    const n = await refreshDueSources();
+    return { detail: `${n} sources refreshed` };
+  }).catch((err) => console.error('[sources] auto-refresh failed:', err));
 });
 
 // Aggiorna la cache delle partite della squadra preferita (widget della
@@ -1724,7 +1853,10 @@ cron.schedule('12 * * * *', async () => {
 
   if (!due) return;
   try {
-    await checkAllChannels();
+    await runJob('channels_check', async () => {
+      const out = await checkAllChannels();
+      return { detail: `${out.online}/${out.total} online (scheduled)` };
+    });
     setSetting('channels_last_check_all_at', String(Date.now()));
   } catch (err) {
     console.error('[status] scheduled check failed:', err.message);

@@ -54,7 +54,7 @@
     <% } else { %>
       <div class="grid gap-2">
         <% favoriteMatches.forEach(function(m) { %>
-          <a href="/football/match?url=<%= encodeURIComponent(m.url) %>"
+          <a href="/football/match?url=<%= encodeURIComponent(m.url) %>&teams=<%= encodeURIComponent(m.title || '') %>"
              class="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 hover:border-indigo-500 transition flex items-center justify-between gap-2 text-sm">
             <span class="min-w-0">
               <span class="block truncate"><%= m.title %></span>

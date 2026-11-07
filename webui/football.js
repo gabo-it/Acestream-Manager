@@ -186,6 +186,22 @@ function parseTeamUrl(url) {
   return { country: m[1], slug: m[2] };
 }
 
+// Titolo della partita ("Atalanta vs Internazionale") dalla sua pagina:
+// serve alla ricerca canali per partita per costruire le query. Lo si
+// prende dall'heading principale della pagina (il <title> del sito porta
+// dietro pubblicità/suffissi del tipo "... - Livesoccertv"); se non ha la
+// forma attesa si ripiega sul <title>. Restituisce '' se il fetch fallisce:
+// il chiamate ha già un suo messaggio d'errore da mostrare.
+async function getMatchTitle(matchUrl) {
+  const html = await fetchHtml(matchUrl);
+  const $ = cheerio.load(html);
+  const h1 = ($('h1').first().text() || '').replace(/\s+/g, ' ').trim();
+  if (/[a-zA-Z\u00C0-\u024F]{2}\s+vs\.?\s+[a-zA-Z\u00C0-\u024F]{2}/i.test(h1)) return h1;
+  const title = ($('title').first().text() || '').replace(/\s+/g, ' ').trim();
+  const m = title.match(/([^|\-–—]*?\s+vs\.?\s+[^|\-–—]*?)(?:\s*[|\-–—]|$)/i);
+  return m ? m[1].trim() : (h1 || title).slice(0, 120);
+}
+
 // --- parsing della lista partite di una squadra ------------------------------
 //
 // La pagina squadra ha una tabella dei palinsesti con una struttura molto
@@ -393,6 +409,7 @@ module.exports = {
   getUpcomingTeamMatches,
   getBroadcastersByCountry,
   parseTeamUrl,
+  getMatchTitle,
   refreshTeamIndex,
   getFootballDiagnostics,
 };

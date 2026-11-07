@@ -60,10 +60,13 @@ MPEG-TS (via acexy, multi-client) and HLS (native engine endpoint) links, plus t
 **VLC**: control remote VLC instances via their native HTTP interface — cast any channel to them with one click from Live TV. **Jellyfin**: active control via its REST API — test the connection and trigger a library refresh directly, plus the M3U/XMLTV URLs for its native Live TV tuner setup. **LAN scanner**: find VLC/Jellyfin candidates on your network by IP range instead of typing addresses by hand (Jellyfin candidates are verified against its public server-info endpoint, not just "something answered this port"). **Cloudflare WARP** *(optional, off by default)*: status check for the webui's own outbound requests — never routes AceStream/acexy traffic
 
 ### ⚽ Football *(experimental)*
-Search a team through a local index built from major league standings, browse matches with kickoff times in your server's timezone, and see broadcasters grouped by country — each broadcaster is cross-checked against your playlist, so channels carrying it get an "In your playlist" watch link right on the match page. livesoccertv.com is behind a Cloudflare challenge that blocks plain server-side requests, so the webui transparently falls back to a bundled headless Chromium when needed (details and tunables in `.env.example`)
+Search a team through a local index built from major league standings, browse matches with kickoff times in your server's timezone, and see broadcasters grouped by country — each broadcaster is cross-checked against your playlist, so channels carrying it get an "In your playlist" watch link right on the match page, and a "Find channels for this match" button searches the AceStream catalog with the two team names so missing streams can be imported in one click. livesoccertv.com is behind a Cloudflare challenge that blocks plain server-side requests, so the webui transparently falls back to a bundled headless Chromium when needed (details and tunables in `.env.example`)
 
 ### 📊 Statistics
 Live peers/speed for any stream (optionally pointing at a different engine), plus a list of streams currently playing through this web UI
+
+### 🩺 Health
+One page answering "is the stack actually working?": a history of every background job run (EPG refresh, channel status checks, source refreshes, football index rebuilds — status, details, duration) and per-channel reliability — the share of checks that found each stream online over its last 60 checks. Channels that are chronically offline sort to the top, and the watch-page failover uses the same data to try the most reliable alternate first
 
 ### 🌍 Everything else
 One-click configuration export/import · installable as a PWA (home-screen icon, offline app shell) · light/dark theme toggle in the sidebar · optional "Update available" badge that checks GitHub releases every 6 hours (toggle in Settings) · weekly engine image rebuilds via GitHub Actions · all AceStream caching kept in RAM
@@ -437,6 +440,7 @@ If any of these projects are useful to you through this one, consider starring t
 
 ## Release notes
 
+- **v3.7.0** — new Health page: background-job history (EPG refresh, channel checks, source refreshes, football index — status, details, duration) and per-channel reliability with an uptime % over the last 60 checks, dead channels on top; the watch-page failover now prefers the most reliable alternate · football match pages get a "Find channels for this match" button: it searches the AceStream catalog with the two team names and imports the picked streams in one click (the complement of "In your playlist", which only shows what you already have)
 - **v3.6.0** — channel search can look through today's full EPG schedule, not just what's on now/next · audio/video track selection on the watch page (server-side remux, "Audio / video tracks") · livesoccertv broadcasters matched against your playlist: "In your playlist" watch links on match pages + followed-team matches widget on the Dashboard · channel favorites (star on Live TV, favorites-only filter) and "Continue watching" row on the Dashboard · installable as a PWA (home-screen icon, offline shell) · optional "new version available" badge checking GitHub releases (can be turned off in Settings) · light/dark theme toggle in the sidebar · stream failover: if playback fails, alternate streams of the same TV channel are one click away
 - **v3.5.0** — Football: livesoccertv.com sits behind a Cloudflare challenge that killed the whole feature (search, schedules, broadcasters all failed with HTTP 403); the webui now falls back to a bundled headless browser when plain requests get challenged · team schedules show exact kickoff date/time in your server's timezone, with competition and TV-channel preview per match (TV reruns filtered out), matches sorted upcoming-first · index status line + manual "Refresh index" button on the Football page · fixed the Brazil Serie A index slug (that league was silently missing)
 - **v3.4.0** — VLC/AcePlayer buttons on watch page, now-airing highlight in schedule, stream technical info panel, remove developer-facing UI text
@@ -446,7 +450,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.6.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.7.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>
