@@ -32,6 +32,24 @@
                   <span class="rounded-full bg-slate-800 px-2.5 py-1 text-xs text-slate-300"><%= ch %></span>
                 <% }); %>
               </div>
+              <% if (row.matches && row.matches.length) { %>
+                <!-- Reti di questo paese trovate anche nella playlist dell'utente:
+                     click e si guarda subito, senza cercare il canale a mano. -->
+                <div class="mt-2 pt-2 border-t border-slate-700/40">
+                  <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">⭐ <%= t('football.in_your_playlist') %></p>
+                  <div class="flex flex-wrap gap-1.5">
+                    <% row.matches.forEach(function(mc) { %>
+                      <a href="/watch/<%= mc.id %>" title="<%= mc.name %><%= mc.status === 'offline' ? ' · ' + t('football.watch_offline_hint') : '' %>"
+                         class="inline-flex items-center gap-1.5 rounded-full bg-indigo-950/60 border border-indigo-700/60 px-2.5 py-1 text-xs text-indigo-200 hover:border-indigo-400 hover:bg-indigo-900/60 transition">
+                        <% if (mc.logo_url) { %>
+                          <img src="<%= mc.logo_url %>" alt="" class="w-4 h-4 rounded object-contain" onerror="this.style.display='none'" />
+                        <% } %>
+                        ▶ <%= mc.name.length > 28 ? mc.name.slice(0, 28) + '…' : mc.name %>
+                      </a>
+                    <% }); %>
+                  </div>
+                </div>
+              <% } %>
             </td>
           </tr>
         <% }); %>

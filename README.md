@@ -45,10 +45,10 @@ Donations don't fund further development — this project is maintained regardle
 Landing page: channel/EPG-source/VLC-device counts, upcoming programs in the next 2 hours, recently added channels, last EPG refresh status — all clickable through to the relevant section
 
 ### 📡 Live TV
-One row per channel with what's on now and what's next right alongside it — click a row to open a modal with the web player, full daily schedule, and one-click casting to any configured VLC device
+One row per channel with what's on now and what's next right alongside it — click a row to open a modal with the web player, full daily schedule, and one-click casting to any configured VLC device · the search box also matches program titles, and an optional "Also search today's full schedule" switch looks for a word in the title and description of every program scheduled today (e.g. "match" lists every channel with a match on today)
 
 ### 📺 Channels
-CRUD, search, bulk select/delete · online/offline status check (single or all at once) · import from URL, pasted M3U, or uploaded file (per-source auto-refresh schedule, with a picker to choose what to import) · link alternate streams to a shared EPG · automatic tvg-id/logo suggestions — even across alphabets (e.g. Cyrillic ↔ Latin), plus a manual EPG search that always works regardless of automatic matching · play via the built-in web player, a one-click `.m3u` download for VLC, an AcePlayer link, or copy the direct link
+CRUD, search, bulk select/delete · online/offline status check (single or all at once) · import from URL, pasted M3U, or uploaded file (per-source auto-refresh schedule, with a picker to choose what to import) · link alternate streams to a shared EPG · automatic tvg-id/logo suggestions — even across alphabets (e.g. Cyrillic ↔ Latin), plus a manual EPG search that always works regardless of automatic matching · play via the built-in web player, a one-click `.m3u` download for VLC, an AcePlayer link, or copy the direct link · in the web player, inspect a stream's audio/video tracks and choose which ones to play (e.g. another commentary language), played through a server-side ffmpeg remux
 
 ### 🔍 Search
 AceStream's own search API with category filtering — select and bulk-import results with one click, same playback options as regular channels
@@ -437,6 +437,7 @@ If any of these projects are useful to you through this one, consider starring t
 
 ## Release notes
 
+- **v3.6.0** — channel search can look through today's full EPG schedule, not just what's on now/next · audio/video track selection on the watch page (server-side remux, "Audio / video tracks") · livesoccertv broadcasters matched against your playlist: "In your playlist" watch links on match pages + followed-team matches widget on the Dashboard · channel favorites (star on Live TV, favorites-only filter) and "Continue watching" row on the Dashboard · installable as a PWA (home-screen icon, offline shell) · optional "new version available" badge checking GitHub releases (can be turned off in Settings) · light/dark theme toggle in the sidebar · stream failover: if playback fails, alternate streams of the same TV channel are one click away
 - **v3.5.0** — Football: livesoccertv.com sits behind a Cloudflare challenge that killed the whole feature (search, schedules, broadcasters all failed with HTTP 403); the webui now falls back to a bundled headless browser when plain requests get challenged · team schedules show exact kickoff date/time in your server's timezone, with competition and TV-channel preview per match (TV reruns filtered out), matches sorted upcoming-first · index status line + manual "Refresh index" button on the Football page · fixed the Brazil Serie A index slug (that league was silently missing)
 - **v3.4.0** — VLC/AcePlayer buttons on watch page, now-airing highlight in schedule, stream technical info panel, remove developer-facing UI text
 - **v3.2.2** — maintenance release
@@ -445,7 +446,7 @@ If any of these projects are useful to you through this one, consider starring t
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.5.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
+  <img src="https://img.shields.io/badge/AceStream%20Manager-v3.6.0-6366F1?style=for-the-badge" alt="AceStream Manager version" /><br/><br/>
   <a href="https://github.com/gabo-it/Acestream-Manager"><strong>github.com/gabo-it/Acestream-Manager</strong></a><br/>
   <sub>Self-hosted · self-maintained · made to be forked</sub>
 </p>

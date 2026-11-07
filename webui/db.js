@@ -51,6 +51,18 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS favorite_channels (
+  channel_id INTEGER PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS watch_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  watched_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_watch_history_channel_time ON watch_history (channel_id, watched_at DESC);
 `);
 
 // --- Migrazione automatica per database creati con schemi precedenti ---
@@ -80,6 +92,57 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_acestream_id ON channels(acestream_id);
 `);
 
+// ---------- Preferiti e cronologia ----------
+
+// I preferiti sono un elenco piccolo e minacciato solo dal delete del
+// canale (ON DELETE CASCADE lo gestisce); nessun limite di dimensione.
+function isFavoriteChannel(channelId) {
+  return !!db.prepare('SELECT 1 FROM favorite_channels WHERE channel_id = ?').get(channelId);
+}
+
+// Toggle: true se ORA è tra i preferiti, false se è stato rimosso.
+function toggleFavoriteChannel(channelId) {
+  if (isFavoriteChannel(channelId)) {
+    db.prepare('DELETE FROM favorite_channels WHERE channel_id = ?').run(channelId);
+    return false;
+  }
+  db.prepare('INSERT OR IGNORE INTO favorite_channels (channel_id) VALUES (?)').run(channelId);
+  return true;
+}
+
+function getFavoriteChannelIds() {
+  return new Set(db.prepare('SELECT channel_id FROM favorite_channels').all().map((r) => r.channel_id));
+}
+
+// Una riga per ogni apertura della pagina watch; teniamo solo l'ultima
+// 100 — è una cronologia "continua a guardare", non un archivio.
+function recordWatch(channelId) {
+  db.prepare('INSERT INTO watch_history (channel_id) VALUES (?)').run(channelId);
+  db.prepare(
+    `DELETE FROM watch_history WHERE id NOT IN (
+       SELECT id FROM watch_history ORDER BY id DESC LIMIT 100
+     )`
+  ).run();
+}
+
+// Ultimi canali guardati, uno riga per canale (l'apertura più recente),
+// il più recente prima — base del widget "Continua a guardare". Il tempo
+// torna in epoch ms (sqlite conserva "YYYY-MM-DD HH:MM:SS" UTC: lo
+// convertiamo qui, la vista formatta solo numeri).
+function getRecentlyWatched(limit = 6) {
+  return db
+    .prepare(
+      `SELECT c.id, c.name, c.logo_url,
+              CAST(strftime('%s', MAX(h.watched_at)) AS INTEGER) * 1000 AS last_watched_ms
+       FROM watch_history h
+       JOIN channels c ON c.id = h.channel_id
+       GROUP BY h.channel_id
+       ORDER BY last_watched_ms DESC
+       LIMIT ?`
+    )
+    .all(limit);
+}
+
 function getSetting(key, fallback = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value : fallback;
@@ -91,4 +154,13 @@ function setSetting(key, value) {
   ).run(key, value);
 }
 
-module.exports = { db, getSetting, setSetting };
+module.exports = {
+  db,
+  getSetting,
+  setSetting,
+  isFavoriteChannel,
+  toggleFavoriteChannel,
+  getFavoriteChannelIds,
+  recordWatch,
+  getRecentlyWatched,
+};

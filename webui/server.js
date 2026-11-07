@@ -3,7 +3,7 @@ require('./errorLog').install();
 const express = require('express');
 const multer = require('multer');
 const cron = require('node-cron');
-const { db, getSetting, setSetting } = require('./db');
+const { db, getSetting, setSetting, toggleFavoriteChannel, getFavoriteChannelIds, recordWatch, getRecentlyWatched } = require('./db');
 const { refreshEpg, getNowNext, getSourceStats } = require('./epg');
 const { buildM3U, buildXmltv } = require('./playlist');
 const { scrapeUrl, importChannels, refreshSource, refreshAllSources, refreshDueSources } = require('./scraper');
@@ -55,6 +55,7 @@ const QRCode = require('qrcode');
 const { getStats, stopSession, getStatsEngineUrl, setStatsEngineUrl, isUsingDefaultEngine } = require('./statsProxy');
 const { proxyTs, proxyHlsManifest, proxyHlsPassthrough } = require('./streamProxy');
 const { remuxToFmp4 } = require('./remux');
+const { probeStreams } = require('./streamProbe');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -75,13 +76,69 @@ function reqT() {
   return getTranslator();
 }
 
+// Confronta versioni semver "a puntini" (3.6.0 > 3.5.10): restituisce true
+// se a è più recente di b. Non serve una libreria: i numeri di versione di
+// questo progetto sono sempre in forma X.Y.Z.
+function semverNewer(a, b) {
+  const pa = String(a || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d > 0;
+  }
+  return false;
+}
+
+// ---------- Controllo nuove versioni (badge nell'interfaccia) ----------
+
+// Controlla l'ultima release pubblicata su GitHub e memorizza il risultato
+// nelle impostazioni: la UI legge SOLO dalla cache (mai una chiamata di rete
+// durante il render di una pagina — una pagina deve restare istantanea).
+// Le chiamate di rete vera avvengono all'avvio (rimandate di qualche secondo
+// per non rallentare il boot) e poi ogni 6 ore dal job pianificato. Un
+// fallimento (offline, rate limit dell'API GitHub) è normale e silenzioso:
+// semplicemente il badge non appare finché un controllo successivo non
+// riesce.
+const GITHUB_LATEST_RELEASE_URL = 'https://api.github.com/repos/gabo-it/Acestream-Manager/releases/latest';
+
+async function checkForUpdate() {
+  if (getSetting('update_check_enabled', '1') !== '1') return;
+  try {
+    const r = await fetch(GITHUB_LATEST_RELEASE_URL, {
+      headers: { 'User-Agent': 'AceStream-Manager', Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const latest = String(data.tag_name || '').replace(/^v/i, '').trim();
+    if (!/^\d+(\.\d+)*$/.test(latest)) throw new Error(`unexpected tag: ${data.tag_name}`);
+    setSetting('update_latest_version', latest);
+    setSetting('update_last_check_at', String(Date.now()));
+    setSetting('update_check_ok', '1');
+  } catch (err) {
+    // Non tocca update_latest_version: mantiene l'ultimo buono conosciuto.
+    setSetting('update_last_check_at', String(Date.now()));
+    setSetting('update_check_ok', '0');
+    console.warn('[update-check] failed:', err.message);
+  }
+}
+
+// Cosa mostrare nel badge della sidebar (sincrono, solo cache).
+function getUpdateBadge() {
+  if (getSetting('update_check_enabled', '1') !== '1') return null;
+  const latest = getSetting('update_latest_version', '');
+  if (!latest || !semverNewer(latest, APP_VERSION)) return null;
+  if (getSetting('update_dismissed_version', '') === latest) return null;
+  return { latest, current: APP_VERSION, url: 'https://github.com/gabo-it/Acestream-Manager/releases' };
+}
+
 // Piccolo helper per renderizzare le viste dentro il layout comune.
 // Inietta sempre t() così ogni vista può tradurre senza doverlo passare a mano.
 // Se locals.titleKey è presente, il <title> del browser viene tradotto di conseguenza.
 function render(res, view, locals = {}) {
   const t = getTranslator();
   const title = locals.titleKey ? t(locals.titleKey) : locals.title;
-  const fullLocals = { ...locals, title, t, lang: 'en', appVersion: APP_VERSION, embed: locals.embed || false };
+  const fullLocals = { ...locals, title, t, lang: 'en', appVersion: APP_VERSION, embed: locals.embed || false, updateBadge: getUpdateBadge() };
   app.render(view, fullLocals, (err, body) => {
     if (err) {
       console.error(err);
@@ -105,13 +162,21 @@ function render(res, view, locals = {}) {
 // (senza filtro testo) e filtriamo DOPO in JS, invece di scrivere una
 // sottoquery SQL con condizioni temporali per "now"/"next": più semplice
 // da leggere, e riusa la stessa funzione getNowNext già usata altrove.
-function getChannelsWithNowNext(searchQuery, filter) {
+function getChannelsWithNowNext(searchQuery, filter, guide) {
   let channels;
   if (filter === 'without_epg') {
     channels = db
       .prepare(
         `SELECT * FROM channels c
          WHERE (c.tvg_id = '' OR NOT EXISTS (SELECT 1 FROM programs p WHERE p.tvg_id = c.tvg_id))
+         ORDER BY sort_order, name COLLATE NOCASE`
+      )
+      .all();
+  } else if (filter === 'favorites') {
+    channels = db
+      .prepare(
+        `SELECT c.* FROM channels c
+         JOIN favorite_channels f ON f.channel_id = c.id
          ORDER BY sort_order, name COLLATE NOCASE`
       )
       .all();
@@ -157,26 +222,90 @@ function getChannelsWithNowNext(searchQuery, filter) {
     }
   }
 
+  const guideMatches = {};
   if (searchQuery) {
     const needle = searchQuery.toLowerCase();
+
+    // Ricerca nel palinsesto dell'intera giornata (opzionale): cerca la
+    // parola nel titolo (originale e tradotto) e nella descrizione di
+    // OGNI programma della giornata, non solo di now/next. La giornata è
+    // quella indicata dal browser (mezzanotte locale dell'utente): solo il
+    // browser conosce il vero fuso orario, il container gira in UTC.
+    const matchesByTvgId = {};
+    if (guide && Number.isFinite(guide.dayStart)) {
+      const dayEnd = guide.dayStart + 24 * 60 * 60 * 1000;
+      const wanted = new Set(channels.map((c) => c.tvg_id).filter(Boolean));
+      if (wanted.size) {
+        const rows = db
+          .prepare(
+            'SELECT tvg_id, title, description, start_ts, stop_ts FROM programs WHERE start_ts < ? AND stop_ts > ? ORDER BY start_ts'
+          )
+          .all(dayEnd, guide.dayStart)
+          .filter((r) => wanted.has(r.tvg_id));
+
+        // Stessa regola di traduzione di now/next: solo dalla cache, mai
+        // chiamate di rete — la ricerca confronta anche il titolo che
+        // l'utente vede davvero (tradotto, se la traduzione è attiva).
+        const translatedByTitle = new Map();
+        if (epgLanguage && getSetting('epg_translate_ui', '1') === '1') {
+          const titles = [...new Set(rows.map((r) => r.title))];
+          const translated = getCachedTranslations(titles, epgLanguage);
+          titles.forEach((t, i) => translatedByTitle.set(t, translated[i]));
+        }
+
+        for (const r of rows) {
+          const shownTitle = translatedByTitle.get(r.title) || r.title;
+          const haystack = `${r.title}\n${shownTitle}\n${r.description || ''}`.toLowerCase();
+          if (haystack.includes(needle)) {
+            (matchesByTvgId[r.tvg_id] = matchesByTvgId[r.tvg_id] || []).push({
+              title: shownTitle,
+              start_ts: r.start_ts,
+              stop_ts: r.stop_ts,
+            });
+          }
+        }
+      }
+    }
+
     channels = channels.filter((ch) => {
       const epg = epgByChannel[ch.id];
       return (
         ch.name.toLowerCase().includes(needle) ||
         (ch.category || '').toLowerCase().includes(needle) ||
         (epg.now && epg.now.title.toLowerCase().includes(needle)) ||
-        (epg.next && epg.next.title.toLowerCase().includes(needle))
+        (epg.next && epg.next.title.toLowerCase().includes(needle)) ||
+        Boolean(ch.tvg_id && matchesByTvgId[ch.tvg_id])
       );
     });
+    for (const ch of channels) {
+      if (ch.tvg_id && matchesByTvgId[ch.tvg_id]) guideMatches[ch.id] = matchesByTvgId[ch.tvg_id];
+    }
   }
 
-  return { channels, epgByChannel, tvgIdCounts };
+  return { channels, epgByChannel, tvgIdCounts, guideMatches };
+}
+
+// Inizio giornata da usare per la ricerca nel palinsesto: il browser invia
+// la propria mezzanotte locale (parametro "ds", epoch ms). Se manca o è
+// palesemente fuori range, ripieghiamo sulla mezzanotte del fuso del
+// container (impostabile con TZ).
+function resolveGuideDayStart(rawDs) {
+  const ds = parseInt(rawDs, 10);
+  if (Number.isFinite(ds) && Math.abs(ds - Date.now()) < 3 * 24 * 60 * 60 * 1000) return ds;
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 
 app.get('/channels', async (req, res) => {
   const q = (req.query.q || '').trim();
-  const filter = req.query.filter === 'without_epg' ? 'without_epg' : '';
-  const { channels, epgByChannel, tvgIdCounts } = getChannelsWithNowNext(q, filter);
+  const filter = req.query.filter === 'without_epg' ? 'without_epg' : req.query.filter === 'favorites' ? 'favorites' : '';
+  const guideOn = req.query.guide === '1' && q !== '';
+  const { channels, epgByChannel, tvgIdCounts, guideMatches } = getChannelsWithNowNext(
+    q,
+    filter,
+    guideOn ? { dayStart: resolveGuideDayStart(req.query.ds) } : null
+  );
   const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
   render(res, 'index', {
     titleKey: 'channels.title',
@@ -185,6 +314,8 @@ app.get('/channels', async (req, res) => {
     tvgIdCounts,
     q,
     filter,
+    guideOn,
+    guideMatches,
     acexyBaseUrl,
     checkMode: getSetting('channels_check_mode', 'off'),
     checkIntervalHours: getSetting('channels_check_interval_hours', '6'),
@@ -305,6 +436,15 @@ app.get('/', (req, res) => {
     checkMode: getSetting('channels_check_mode', 'off'),
   };
 
+  // "Continua a guardare": ultimi canali aperti nel player (il più recente
+  // prima) — ogni apertura di /watch/:id registra una visione.
+  const continueWatching = getRecentlyWatched(6);
+
+  // Prossime partite della squadra preferita: lette SOLO dalla cache
+  // (scritta dalla pagina Football e dal job orario) — la Dashboard non
+  // deve mai aspettare una richiesta a livesoccertv.com per aprirsi.
+  const favoriteMatch = readFavoriteMatchesCache();
+
   render(res, 'dashboard', {
     titleKey: 'dashboard.title',
     channelCount,
@@ -316,6 +456,8 @@ app.get('/', (req, res) => {
     onAir,
     recentChannels,
     inventory,
+    continueWatching,
+    favoriteMatch,
     recentIssues: getRecentIssues(15),
   });
 });
@@ -323,10 +465,36 @@ app.get('/', (req, res) => {
 // Vista compatta orientata alla riproduzione: lista cliccabile con
 // anteprima now/next, click per espandere player web + programmazione
 // completa + invio a dispositivi VLC configurati in Add-Ons.
+// ?filter=favorites: solo i canali segnati con la stella.
 app.get('/tv', (req, res) => {
   const q = (req.query.q || '').trim();
-  const { channels, epgByChannel } = getChannelsWithNowNext(q);
-  render(res, 'tv', { titleKey: 'tv.title', channels, epgByChannel, q, vlcDevices: listVlcDevices() });
+  const filter = req.query.filter === 'favorites' ? 'favorites' : '';
+  const guideOn = req.query.guide === '1' && q !== '';
+  const { channels, epgByChannel, guideMatches } = getChannelsWithNowNext(
+    q,
+    filter,
+    guideOn ? { dayStart: resolveGuideDayStart(req.query.ds) } : null
+  );
+  render(res, 'tv', {
+    titleKey: 'tv.title',
+    channels,
+    epgByChannel,
+    q,
+    filter,
+    guideOn,
+    guideMatches,
+    favoriteIds: [...getFavoriteChannelIds()],
+    vlcDevices: listVlcDevices(),
+  });
+});
+
+// Toggle preferito per un canale (stella sulla lista TV) — JSON per il JS
+// della pagina, che aggiorna la stella senza ricaricare.
+app.post('/channels/:id/favorite', (req, res) => {
+  const channel = db.prepare('SELECT id FROM channels WHERE id = ?').get(req.params.id);
+  if (!channel) return res.status(404).json({ ok: false, error: reqT()('errors.channel_not_found') });
+  const favorite = toggleFavoriteChannel(channel.id);
+  res.json({ ok: true, favorite });
 });
 
 // Invia lo stream di un canale (via M3U/TS, stesso URL usato da VLC/AcePlayer
@@ -554,8 +722,25 @@ function buildStreamUrls(req, acestreamId) {
 app.get('/watch/:id', (req, res) => {
   const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(req.params.id);
   if (!channel) return res.status(404).send(reqT()('errors.channel_not_found'));
+  // Cronologia "continua a guardare": ogni apertura della pagina di
+  // riproduzione conta come una visione (anche dall'iframe del tab TV —
+  // è comunque qualcuno che sta guardando).
+  try { recordWatch(channel.id); } catch (err) { console.error('[history] record failed:', err.message); }
+  // Stream alternativi: altri canali collegati alla stessa identità TV
+  // (stesso tvg_id) — proposti dalla pagina solo se la riproduzione
+  // fallisce, come via di fuga manuale o automatica. Ordinati con gli
+  // online prima, così il failover automatico prova prima il più probabile.
+  const alternates = channel.tvg_id
+    ? db
+        .prepare(
+          `SELECT id, name, logo_url, status FROM channels
+           WHERE tvg_id = ? AND id != ?
+           ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'unknown' THEN 1 ELSE 2 END, sort_order, name COLLATE NOCASE`
+        )
+        .all(channel.tvg_id, channel.id)
+    : [];
   const { tsUrl, tsProxyUrl } = buildStreamUrls(req, channel.acestream_id);
-  render(res, 'watch', { title: channel.name, channel, streamUrl: tsUrl, tsProxyUrl, embed: req.query.embed === '1' });
+  render(res, 'watch', { title: channel.name, channel, streamUrl: tsUrl, tsProxyUrl, alternates, embed: req.query.embed === '1' });
 });
 
 // Come /watch/:id ma per contenuti non ancora salvati come canale (es. un
@@ -610,10 +795,28 @@ app.get('/stream-proxy/hls/:id/*', proxyHlsPassthrough);
 // il client si disconnette, altrimenti resta a girare a vuoto.
 app.get('/stream-proxy/fmp4/:id', (req, res) => {
   if (!/^[a-fA-F0-9]{40}$/.test(req.params.id)) return res.status(400).end();
-  const ffmpeg = remuxToFmp4(req.params.id, res);
+  // "a" / "v": traccia audio / video scelta dall'utente (indice per tipo)
+  // dopo aver ispezionato il flusso — assenti = scelta automatica.
+  const audio = req.query.a !== undefined ? parseInt(req.query.a, 10) : undefined;
+  const video = req.query.v !== undefined ? parseInt(req.query.v, 10) : undefined;
+  const ffmpeg = remuxToFmp4(req.params.id, res, { audio, video });
   req.on('close', () => {
     if (!ffmpeg.killed) ffmpeg.kill('SIGKILL');
   });
+});
+
+// Elenco delle tracce video/audio/sottotitoli presenti nel flusso, per la
+// scelta nella finestra di riproduzione. Un errore qui (es. il canale non
+// risponde in questo momento) viene restituito alla pagina, non loggato
+// come errore del server: non è un problema della webui.
+app.get('/stream-proxy/tracks/:id', async (req, res) => {
+  if (!/^[a-fA-F0-9]{40}$/.test(req.params.id)) return res.status(400).json({ ok: false, error: 'invalid id' });
+  try {
+    const tracks = await probeStreams(req.params.id);
+    res.json({ ok: true, ...tracks });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
 
 // ---------- Sorgenti (scraping ricorrente) ----------
@@ -1023,6 +1226,35 @@ app.get('/addons/warp/status', async (req, res) => {
 
 // ---------- Calendario calcio / trasmittenti ----------
 
+// Cache delle partite della squadra preferita (settings, scritta da qui e
+// dal job orario): la Dashboard la legge SENZA toccare la rete — nessuna
+// pagina deve aspettare un request a livesoccertv.com per aprirsi.
+async function refreshFavoriteMatchesCache() {
+  const raw = getSetting('football_favorite_team', '');
+  if (!raw) return;
+  const team = JSON.parse(raw); // lancia volontariamente se corrotto: gestito dai chiamanti
+  const matches = (await getUpcomingTeamMatches(team.country, team.slug, team.name, 5)).map((m) => ({
+    ...m,
+    ko: formatKickoff(m.koEpoch),
+  }));
+  setSetting(
+    'football_favorite_matches_cache',
+    JSON.stringify({ team: team.name, country: team.country, slug: team.slug, matches, updatedAt: Date.now() })
+  );
+}
+
+function readFavoriteMatchesCache() {
+  const raw = getSetting('football_favorite_matches_cache', '');
+  if (!raw) return null;
+  try {
+    const cached = JSON.parse(raw);
+    if (cached && cached.team && Array.isArray(cached.matches)) return cached;
+  } catch {
+    /* cache corrotta: la ricaviamo al prossimo giro */
+  }
+  return null;
+}
+
 app.get('/football', async (req, res) => {
   const team = (req.query.team || '').trim();
   let candidates = [];
@@ -1045,8 +1277,10 @@ app.get('/football', async (req, res) => {
   if (favoriteRaw) {
     try {
       favoriteTeam = JSON.parse(favoriteRaw);
-      favoriteMatches = (await getUpcomingTeamMatches(favoriteTeam.country, favoriteTeam.slug, favoriteTeam.name, 5))
-        .map((m) => ({ ...m, ko: formatKickoff(m.koEpoch) }));
+      // Dati freschi per la scheda qui sotto E cache aggiornata per il
+      // widget della Dashboard (che da sola non tocca mai la rete).
+      await refreshFavoriteMatchesCache();
+      favoriteMatches = (readFavoriteMatchesCache() || { matches: [] }).matches;
     } catch (err) {
       favoriteError = err.message;
     }
@@ -1125,6 +1359,46 @@ app.get('/football/team', async (req, res) => {
   render(res, 'football_team', { titleKey: 'football.title', country, slug, name, matches, error, nowMs: Date.now() });
 });
 
+// Normalizza un nome canale/trasmittente per il confronto: minuscolo, senza
+// accenti, punteggiatura trasformata in spazi, spazi collassati.
+function normalizeBroadcastName(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// Trova i canali della playlist che probabilmente trasmettono un dato
+// broadcaster (es. "Sky Sport Arena" → canale "Sky Sport Arena HD"), così
+// dalla pagina di una partita si può andare dritti al stream giusto.
+// Punteggio: 3 = nome identico dopo normalizzazione; 2 = l'uno contiene
+// l'altro per intero come sottostringa di parole; 1 = tutte le parole del
+// broadcaster sono presenti nel nome del canale. Con un broadcaster di una
+// sola parola il punteggio 1 è escluso ("Sky" non deve combaciare con
+// qualunque canale che contiene la parola "sky": troppo rumore).
+function matchChannelsToBroadcaster(broadcaster, channels) {
+  const target = normalizeBroadcastName(broadcaster);
+  if (!target) return [];
+  const targetTokens = target.split(' ');
+  const scored = [];
+  for (const ch of channels) {
+    const name = normalizeBroadcastName(ch.name);
+    if (!name) continue;
+    let score = 0;
+    if (name === target) score = 3;
+    else if (name.includes(target) || target.includes(name)) score = 2;
+    else if (targetTokens.length > 1) {
+      const nameTokens = new Set(name.split(' '));
+      if (targetTokens.every((tk) => nameTokens.has(tk))) score = 1;
+    }
+    if (score > 0) scored.push({ channel: ch, score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.channel.name.localeCompare(b.channel.name));
+  return scored.slice(0, 3).map((s) => s.channel);
+}
+
 app.get('/football/match', async (req, res) => {
   const matchUrl = (req.query.url || '').trim();
   let coverage = [];
@@ -1138,7 +1412,26 @@ app.get('/football/match', async (req, res) => {
       error = err.message;
     }
   }
-  render(res, 'football_match', { titleKey: 'football.broadcasters_title', matchUrl, coverage, error });
+
+  // Per ogni paese, quali canali della playlist sembrano trasmettere
+  // quelle reti — l'utente può cliccare e guardare subito, senza cercare
+  // a mano il canale dopo aver letto l'elenco delle trasmittenti.
+  let coverageWithMatches = [];
+  if (coverage.length) {
+    const allChannels = db
+      .prepare('SELECT id, name, logo_url, status FROM channels ORDER BY sort_order, name COLLATE NOCASE')
+      .all();
+    coverageWithMatches = coverage.map((row) => {
+      const byId = new Map();
+      for (const ch of row.channels) {
+        for (const m of matchChannelsToBroadcaster(ch, allChannels)) {
+          if (!byId.has(m.id)) byId.set(m.id, m); // lo stesso canale può matchare più reti: una volta sola
+        }
+      }
+      return { ...row, matches: [...byId.values()] };
+    });
+  }
+  render(res, 'football_match', { titleKey: 'football.broadcasters_title', matchUrl, coverage: coverageWithMatches, error });
 });
 
 // ---------- Impostazioni ----------
@@ -1149,6 +1442,7 @@ app.get('/settings', (req, res) => {
     acexyBaseUrl: getSetting('acexy_base_url', 'http://acexy:8080'),
     httpPlaybackUrl: getSetting('http_playback_url', ''),
     enginePublicUrl: getSetting('engine_public_url', ''),
+    updateCheckEnabled: getSetting('update_check_enabled', '1') === '1',
   });
 });
 
@@ -1170,7 +1464,17 @@ app.post('/settings', (req, res) => {
   // (comportamento di sempre) — vedi streamProxy.js/remux.js.
   setSetting('http_playback_url', normalizeBaseUrl(req.body.http_playback_url, ''));
   setSetting('engine_public_url', normalizeBaseUrl(req.body.engine_public_url, ''));
+  // Checkbox HTML: assente dal body = disattivato. Il controllo delle
+  // nuove versioni è attivo di default (chi non lo vuole lo spegne qui).
+  setSetting('update_check_enabled', req.body.update_check_enabled ? '1' : '0');
   res.redirect('/settings');
+});
+
+// Nasconde il badge "nuova versione disponibile" finché non esce una
+// release più recente di quella già scartata.
+app.post('/settings/update-check/dismiss', (req, res) => {
+  setSetting('update_dismissed_version', getSetting('update_latest_version', ''));
+  res.redirect(req.get('referer') || '/');
 });
 
 // Controllo raggiungibilità/versione per un URL engine qualsiasi (usa lo
@@ -1373,6 +1677,21 @@ refreshEpg().catch((err) => console.error('[epg] initial refresh failed:', err))
 // intervallo globale). Le sorgenti manuali non vengono mai toccate qui.
 cron.schedule('7 * * * *', () => {
   refreshDueSources().catch((err) => console.error('[sources] auto-refresh failed:', err));
+});
+
+// Aggiorna la cache delle partite della squadra preferita (widget della
+// Dashboard) una volta all'ora, a :37 — la paginaFootball la aggiorna
+// comunque a ogni visita: questo job copre chi non la apre per giorni.
+cron.schedule('37 * * * *', () => {
+  refreshFavoriteMatchesCache().catch((err) => console.warn('[football] favorite cache refresh failed:', err.message));
+});
+refreshFavoriteMatchesCache().catch((err) => console.warn('[football] favorite cache refresh failed:', err.message));
+
+// Controllo nuove versioni su GitHub: all'avvio (rimandato di 5 secondi
+// per non toccare il boot) e poi ogni 6 ore. Letto dalla cache dalla UI.
+setTimeout(() => checkForUpdate(), 5000);
+cron.schedule('11 */6 * * *', () => {
+  checkForUpdate().catch((err) => console.warn('[update-check] job failed:', err.message));
 });
 
 // Controllo schedulato dello stato di tutti i canali (online/offline) —

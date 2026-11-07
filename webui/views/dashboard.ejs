@@ -41,6 +41,37 @@
   </a>
 </div>
 
+<!-- Squadra preferita: prossime partite, lette dalla cache (mai rete qui —
+     vedi refreshFavoriteMatchesCache in server.js) -->
+<% if (favoriteMatch) { %>
+  <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
+    <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+      <h2 class="font-semibold flex items-center gap-2 min-w-0">⚽ <%= t('dashboard.favorite_team_title') %> · <span class="text-indigo-300 truncate"><%= favoriteMatch.team %></span></h2>
+      <a href="/football/team?country=<%= encodeURIComponent(favoriteMatch.country) %>&slug=<%= encodeURIComponent(favoriteMatch.slug) %>&name=<%= encodeURIComponent(favoriteMatch.team) %>" class="text-xs text-indigo-400 hover:underline flex-shrink-0"><%= t('dashboard.favorite_team_open') %> →</a>
+    </div>
+    <% if (favoriteMatch.matches.length === 0) { %>
+      <p class="text-sm text-slate-500"><%= t('dashboard.favorite_team_none') %></p>
+    <% } else { %>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <% favoriteMatch.matches.slice(0, 4).forEach(function(m) { %>
+          <a href="/football/match?url=<%= encodeURIComponent(m.url) %>" class="rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5 flex items-center justify-between gap-2 min-w-0">
+            <span class="min-w-0">
+              <span class="block text-sm font-medium truncate"><%= m.title %></span>
+              <% if (m.competition) { %><span class="block text-xs text-slate-500 truncate"><%= m.competition %></span><% } %>
+            </span>
+            <span class="text-xs text-indigo-300 flex-shrink-0 whitespace-nowrap">
+              <% if (m.ko) { %><%= m.ko.date %><% if (m.ko.time) { %> · <span data-format-time="<%= m.koEpoch %>">—</span><% } %><% } else if (m.date) { %><%= m.date %><% } %>
+            </span>
+          </a>
+        <% }); %>
+      </div>
+      <% if (favoriteMatch.updatedAt) { %>
+        <p class="text-[10px] text-slate-600 mt-2"><%= t('dashboard.favorite_team_last_cache') %>: <span data-format-datetime="<%= favoriteMatch.updatedAt %>">—</span></p>
+      <% } %>
+    <% } %>
+  </div>
+<% } %>
+
 <!-- In onda ora -->
 <% if (onAir.length > 0) { %>
   <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
@@ -87,6 +118,28 @@
             <span class="block text-xs text-slate-500 truncate">
               <span data-format-time="<%= ch.next.start_ts %>">—</span> · <%= ch.next.title %>
             </span>
+          </span>
+        </a>
+      <% }); %>
+    </div>
+  </div>
+<% } %>
+
+<!-- Continua a guardare: ultimi canali aperti nel player -->
+<% if (continueWatching.length > 0) { %>
+  <div class="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/70 to-slate-900/30 p-5 mb-6">
+    <h2 class="font-semibold mb-3">▶️ <%= t('dashboard.continue_watching') %></h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <% continueWatching.forEach(function(ch) { %>
+        <a href="/watch/<%= ch.id %>" class="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-950/60 hover:border-indigo-500/50 hover:bg-slate-900 transition px-3 py-2.5">
+          <% if (ch.logo_url) { %>
+            <img src="<%= ch.logo_url %>" alt="" class="w-8 h-8 rounded-lg object-contain bg-slate-900 ring-1 ring-slate-700/60 flex-shrink-0" onerror="this.style.display='none'" />
+          <% } else { %>
+            <span class="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-700/60 flex-shrink-0 flex items-center justify-center text-xs">📺</span>
+          <% } %>
+          <span class="min-w-0">
+            <span class="block text-sm font-medium truncate"><%= ch.name %></span>
+            <span class="block text-xs text-slate-500"><%= t('dashboard.continue_watching_hint') %> <span data-format-datetime="<%= ch.last_watched_ms %>">—</span></span>
           </span>
         </a>
       <% }); %>

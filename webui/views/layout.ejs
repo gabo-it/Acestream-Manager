@@ -4,8 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · AceStream Manager</title>
+  <script>
+    // Tema scelto prima del primo paint (niente flash): dark è il default,
+    // "light" aggiunge la classe a <html> che attiva public/light.css.
+    try { if (localStorage.getItem('asm-theme') === 'light') document.documentElement.classList.add('light'); } catch (e) {}
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#020617" />
+  <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="stylesheet" href="/light.css" />
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
     .sidebar-link { display: flex; align-items: center; gap: 0.625rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; color: #94a3b8; font-size: 0.875rem; transition: all 0.15s; }
@@ -60,7 +70,24 @@
           <a href="/addons" data-nav class="sidebar-link">🔌 <%= t('nav.addons') %></a>
           <a href="/stats" data-nav class="sidebar-link">📊 <%= t('nav.stats') %></a>
           <a href="/settings" data-nav class="sidebar-link">⚙️ <%= t('nav.settings') %></a>
+          <button type="button" id="theme-toggle" class="sidebar-link w-full text-left mt-1" title="Toggle light / dark theme">
+            🌓 <span id="theme-toggle-label"><%= t('nav.theme_light') %></span>
+          </button>
         </div>
+
+        <% if (updateBadge) { %>
+          <!-- Nuova versione disponibile su GitHub (controllo in background,
+               badge calcolato lato server solo dalla cache — vedi server.js). -->
+          <div class="mt-3 mx-1 rounded-lg border border-emerald-700/60 bg-emerald-950/40 px-2.5 py-2 text-[11px] leading-snug">
+            <a href="<%= updateBadge.url %>" target="_blank" rel="noopener" class="text-emerald-300 hover:text-emerald-200 font-medium flex items-center gap-1.5">
+              ⬆️ <%= t('update.badge') %>
+            </a>
+            <div class="text-emerald-500/90 mt-0.5 font-mono">v<%= updateBadge.current %> → v<%= updateBadge.latest %></div>
+            <form method="POST" action="/settings/update-check/dismiss" class="mt-1">
+              <button type="submit" class="text-emerald-600 hover:text-emerald-400 hover:underline"><%= t('update.dismiss') %></button>
+            </form>
+          </div>
+        <% } %>
       </nav>
     </aside>
 
@@ -125,6 +152,34 @@
       }
       if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
       if (overlay) overlay.addEventListener('click', closeSidebar);
+
+      // Toggle tema chiaro/scuro: classe "light" su <html> (public/light.css)
+      // + preferenza in localStorage. L'etichetta mostra la destinazione.
+      var themeBtn = document.getElementById('theme-toggle');
+      var themeLabel = document.getElementById('theme-toggle-label');
+      function syncThemeLabel() {
+        if (themeLabel) themeLabel.textContent = document.documentElement.classList.contains('light')
+          ? <%- JSON.stringify(t('nav.theme_dark')) %>
+          : <%- JSON.stringify(t('nav.theme_light')) %>;
+      }
+      if (themeBtn) {
+        syncThemeLabel();
+        themeBtn.addEventListener('click', function () {
+          var light = document.documentElement.classList.toggle('light');
+          try { localStorage.setItem('asm-theme', light ? 'light' : 'dark'); } catch (e) {}
+          syncThemeLabel();
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', light ? '#f1f5f9' : '#020617');
+        });
+      }
+
+      // Service worker: solo pagine complete (il player in embed/iframe non
+      // ne ha bisogno e un SW in più dentro l'iframe sarebbe solo rumore).
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {});
+        });
+      }
     })();
   </script>
 <% } else { %>

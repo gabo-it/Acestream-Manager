@@ -32,6 +32,17 @@
     <p class="text-xs text-slate-500 mt-1"><%= t('settings.engine_public_url_help') %></p>
   </div>
 
+  <div class="border-t border-slate-700/60 pt-4">
+    <label class="inline-flex items-start gap-2.5 cursor-pointer">
+      <input type="checkbox" name="update_check_enabled" value="1" <%= updateCheckEnabled ? 'checked' : '' %>
+             class="mt-0.5 rounded bg-slate-950 border-slate-700" />
+      <span>
+        <span class="block text-sm text-slate-300"><%= t('settings.update_check_label') %></span>
+        <span class="block text-xs text-slate-500 mt-0.5"><%= t('settings.update_check_help') %></span>
+      </span>
+    </label>
+  </div>
+
   <div class="flex gap-3">
     <button class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
       <%= t('settings.save') %>

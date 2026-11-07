@@ -1,22 +1,37 @@
 <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
   <h1 class="text-3xl font-bold tracking-tight"><%= t('tv.title') %></h1>
-  <form method="GET" action="/tv" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
+  <form id="tv-search-form" method="GET" action="/tv" class="flex items-center rounded-xl bg-slate-900/80 border border-slate-800 focus-within:border-indigo-500/60 transition overflow-hidden">
+    <input type="hidden" name="ds" id="guide-ds" disabled />
     <input type="text" name="q" value="<%= q || '' %>" placeholder="<%= t('channels.search_placeholder') %>"
            class="bg-transparent px-3.5 py-2.5 text-sm focus:outline-none w-56 placeholder:text-slate-600" />
     <button class="px-3.5 py-2.5 text-slate-500 hover:text-indigo-400 transition">🔍</button>
   </form>
 </div>
 
+<label class="inline-flex items-center gap-2 text-xs text-slate-400 cursor-pointer mb-4" title="<%= t('channels.guide_hint') %>">
+  <input type="checkbox" id="guide-checkbox" name="guide" value="1" form="tv-search-form" <%= guideOn ? 'checked' : '' %> class="rounded bg-slate-950 border-slate-700" />
+  <%= t('channels.guide_checkbox') %>
+</label>
+
+<!-- Filtro preferiti: stessa lista, solo i canali con la stella -->
+<% if (filter === 'favorites') { %>
+  <a href="/tv" class="inline-flex items-center gap-2 text-xs text-amber-300 hover:text-amber-200 mb-4 ml-4 underline"><%= t('tv.favorites_filter_active') %></a>
+<% } else { %>
+  <a href="/tv?filter=favorites" class="inline-flex items-center gap-2 text-xs text-slate-400 hover:text-amber-300 mb-4 ml-4"><%= t('tv.favorites_filter') %></a>
+<% } %>
+
 <!-- Elenco canali -->
 <% if (channels.length === 0) { %>
-  <p class="text-sm text-slate-500"><%= t('channels.empty') %></p>
+  <p class="text-sm text-slate-500"><%= filter === 'favorites' ? t('tv.favorites_empty') : t('channels.empty') %></p>
 <% } else { %>
   <div class="grid gap-2 mb-8">
     <% channels.forEach(function(ch) { %>
       <% var epg = epgByChannel[ch.id] || {}; %>
       <% var dotColor = ch.status === 'online' ? 'bg-emerald-500' : ch.status === 'offline' ? 'bg-red-500' : 'bg-slate-600'; %>
-      <button type="button" data-tv-card="<%= ch.id %>" data-tv-name="<%= ch.name %>"
-              class="group w-full flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-indigo-500/50 hover:bg-slate-900 transition p-3 text-left">
+      <% var isFav = favoriteIds.indexOf(ch.id) !== -1; %>
+      <div class="flex items-stretch gap-2" data-fav-row="<%= ch.id %>">
+        <button type="button" data-tv-card="<%= ch.id %>" data-tv-name="<%= ch.name %>"
+                class="group flex-1 min-w-0 flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-indigo-500/50 hover:bg-slate-900 transition p-3 text-left">
         <div class="flex items-center gap-3 w-56 flex-shrink-0 min-w-0">
           <div class="relative flex-shrink-0">
             <% if (ch.logo_url) { %>
@@ -43,8 +58,24 @@
           <% } else { %>
             <p class="text-sm text-slate-600"><%= t('tv.no_epg') %></p>
           <% } %>
+          <% const gm = guideMatches[ch.id]; %>
+          <% if (gm && gm.length) { %>
+            <div class="mt-1.5 pt-1.5 border-t border-amber-900/40 text-xs">
+              <% gm.slice(0, 4).forEach(function(m) { %>
+                <p class="truncate <%= m.stop_ts < Date.now() ? 'text-slate-600' : 'text-amber-200/80' %>">
+                  <span class="font-mono text-slate-500" data-tv-format-range="<%= m.start_ts %>|<%= m.stop_ts %>">—</span> <%= m.title %>
+                </p>
+              <% }); %>
+              <% if (gm.length > 4) { %><p class="text-slate-500">+<%= gm.length - 4 %> <%= t('channels.guide_more') %></p><% } %>
+            </div>
+          <% } %>
         </div>
-      </button>
+        </button>
+        <button type="button" data-fav="<%= ch.id %>" title="<%= isFav ? t('tv.fav_remove') : t('tv.fav_add') %>"
+                class="flex-shrink-0 w-10 rounded-xl border transition text-lg <%= isFav ? 'border-amber-700/60 bg-amber-950/30 text-amber-300' : 'border-slate-800 bg-slate-900/40 text-slate-600 hover:text-amber-300 hover:border-amber-700/60' %>">
+          <%= isFav ? '★' : '☆' %>
+        </button>
+      </div>
     <% }); %>
   </div>
 <% } %>
@@ -216,6 +247,44 @@
     });
   });
 
+  // Stella preferiti: toggle via fetch, senza ricaricare la pagina. Nel
+  // filtro "solo preferiti" la riga scompare quando si toglie la stella.
+  var favoritesOnly = <%- JSON.stringify(filter === 'favorites') %>;
+  var FAV_REMOVE = <%- JSON.stringify(t('tv.fav_remove')) %>;
+  var FAV_ADD = <%- JSON.stringify(t('tv.fav_add')) %>;
+  var FAV_EMPTY = <%- JSON.stringify(t('tv.favorites_empty')) %>;
+  document.querySelectorAll('[data-fav]').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var id = btn.getAttribute('data-fav');
+      btn.disabled = true;
+      fetch('/channels/' + id + '/favorite', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          btn.disabled = false;
+          if (!d || !d.ok) return;
+          if (!d.favorite && favoritesOnly) {
+            var row = document.querySelector('[data-fav-row="' + id + '"]');
+            if (row) row.remove();
+            if (!document.querySelector('[data-fav]')) {
+              var list = document.querySelector('.grid.gap-2.mb-8');
+              var empty = document.createElement('p');
+              empty.className = 'text-sm text-slate-500';
+              empty.textContent = FAV_EMPTY;
+              if (list) list.replaceWith(empty);
+            }
+            return;
+          }
+          btn.textContent = d.favorite ? '★' : '☆';
+          btn.className = 'flex-shrink-0 w-10 rounded-xl border transition text-lg ' + (d.favorite
+            ? 'border-amber-700/60 bg-amber-950/30 text-amber-300'
+            : 'border-slate-800 bg-slate-900/40 text-slate-600 hover:text-amber-300 hover:border-amber-700/60');
+          btn.title = d.favorite ? FAV_REMOVE : FAV_ADD;
+        })
+        .catch(function () { btn.disabled = false; });
+    });
+  });
+
   document.getElementById('tv-modal-overlay').addEventListener('click', function (e) {
     if (e.target === e.currentTarget) closeTvModal();
   });
@@ -242,4 +311,18 @@
     var parts = el.dataset.tvFormatRange.split('|').map(function (s) { return parseInt(s, 10); });
     if (parts[0] && parts[1]) el.textContent = formatTime(parts[0]) + '–' + formatTime(parts[1]);
   });
+
+  // Ricerca nel palinsesto del giorno: il browser invia la propria
+  // mezzanotte locale ("ds"), il container gira in UTC.
+  (function () {
+    var form = document.getElementById('tv-search-form');
+    var box = document.getElementById('guide-checkbox');
+    var ds = document.getElementById('guide-ds');
+    if (!form || !box || !ds) return;
+    form.addEventListener('submit', function () {
+      var now = new Date();
+      ds.value = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      ds.disabled = !box.checked;
+    });
+  })();
 </script>

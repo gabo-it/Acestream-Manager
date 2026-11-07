@@ -14,9 +14,25 @@ const { getSetting } = require('./db');
 // suoi normali retry e il tentativo senza audio, ha comunque fallito) —
 // il percorso principale via mpegts.js resta invariato per tutti,
 // Firefox compreso.
-function remuxToFmp4(acestreamId, res) {
+//
+// opts.audio / opts.video: indice (per tipo, 0-based) della traccia da
+// usare quando il flusso ne contiene più di una — vedi streamProbe.js. Se
+// assenti, ffmpeg sceglie da solo come sempre (comportamento invariato).
+function remuxToFmp4(acestreamId, res, opts = {}) {
   const httpPlaybackUrl = getSetting('http_playback_url', getSetting('acexy_base_url', 'http://acexy:8080')).replace(/\/$/, '');
   const inputUrl = `${httpPlaybackUrl}/ace/getstream?id=${encodeURIComponent(acestreamId)}`;
+
+  // Con -map esplicito ffmpeg include SOLO le tracce indicate (niente
+  // sottotitoli/dati): il "?" finale le rende facoltative, così un indice
+  // non più valido non fa fallire l'intera sessione.
+  const toIndex = (n) => (Number.isInteger(n) && n >= 0 && n < 32 ? n : null);
+  const audioIdx = toIndex(opts.audio);
+  const videoIdx = toIndex(opts.video);
+  const mapArgs = [];
+  if (audioIdx !== null || videoIdx !== null) {
+    mapArgs.push('-map', `0:v:${videoIdx !== null ? videoIdx : 0}?`);
+    mapArgs.push('-map', `0:a:${audioIdx !== null ? audioIdx : 0}?`);
+  }
 
   const ffmpeg = spawn('ffmpeg', [
     // Finestra di analisi iniziale più ampia del default ffmpeg (~5s/5MB):
@@ -32,6 +48,7 @@ function remuxToFmp4(acestreamId, res) {
     '-err_detect', 'ignore_err',
     '-fflags', '+genpts+discardcorrupt',
     '-i', inputUrl,
+    ...mapArgs,
     '-c:v', 'copy',
     '-c:a', 'aac',
     '-f', 'mp4',
