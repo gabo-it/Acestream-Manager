@@ -3,7 +3,7 @@ require('./errorLog').install();
 const express = require('express');
 const multer = require('multer');
 const cron = require('node-cron');
-const { db, getSetting, setSetting, toggleFavoriteChannel, getFavoriteChannelIds, recordWatch, getRecentlyWatched, getStatusStats, runJob, getJobRuns } = require('./db');
+const { db, getSetting, setSetting, toggleFavoriteChannel, getFavoriteChannelIds, recordWatch, getRecentlyWatched, getStatusStats, runJob, recordJobRun, getJobRuns } = require('./db');
 const { refreshEpg, getNowNext, getSourceStats } = require('./epg');
 const { buildM3U, buildXmltv } = require('./playlist');
 const { scrapeUrl, importChannels, refreshSource, refreshAllSources, refreshDueSources } = require('./scraper');
@@ -1695,7 +1695,9 @@ app.get('/football/match/channels', async (req, res) => {
 // ---------- Health (cronologia job + affidabilità canali) ----------
 
 app.get('/jobs', (req, res) => {
-  const runs = getJobRuns(60);
+  // 200 righe: con il box scorrevole la lista lunga non appesantisce più la
+  // pagina, e la ritenzione reale è comunque limitata a 7 giorni dal db.js.
+  const runs = getJobRuns(200);
   const stats = getStatusStats();
   const channels = db
     .prepare('SELECT id, name, logo_url, status, last_checked_at FROM channels')
@@ -1961,11 +1963,18 @@ runJob('epg_refresh', async () => {
 // Controlla ogni ora quali sorgenti con auto-refresh impostato sono "dovute"
 // secondo il proprio intervallo individuale (ognuna il suo, non un unico
 // intervallo globale). Le sorgenti manuali non vengono mai toccate qui.
-cron.schedule('7 * * * *', () => {
-  runJob('sources_refresh', async () => {
+// Quando nessuna sorgente è dovuta (n = 0) la corsa NON viene registrata:
+// altrimenti la cronologia si riempireebbe di righe identiche e inutili
+// "0 sources refreshed" una ogni ora. Gli errori restano sempre registrati.
+cron.schedule('7 * * * *', async () => {
+  const startedAt = Date.now();
+  try {
     const n = await refreshDueSources();
-    return { detail: `${n} sources refreshed` };
-  }).catch((err) => console.error('[sources] auto-refresh failed:', err));
+    if (n > 0) recordJobRun('sources_refresh', 'ok', `${n} sources refreshed`, Date.now() - startedAt);
+  } catch (err) {
+    recordJobRun('sources_refresh', 'error', err.message, Date.now() - startedAt);
+    console.error('[sources] auto-refresh failed:', err);
+  }
 });
 
 // Aggiorna la cache delle partite della squadra preferita (widget della
