@@ -432,6 +432,7 @@ const STRINGS = {
     'health.title': 'Service health',
     'health.subtitle': 'History of background jobs and channel reliability over time — data comes from the scheduled and manual checks this app already runs.',
     'health.jobs_title': 'Job history',
+    'health.jobs_subtitle': 'Last 7 days, newest first. Scheduled runs that had nothing to do (e.g. no source due for refresh) are not recorded.',
     'health.no_runs': 'No jobs recorded yet. Entries appear here as background jobs run: EPG refresh, channel status checks, source refreshes, football index rebuild.',
     'health.when': 'When',
     'health.job': 'Job',

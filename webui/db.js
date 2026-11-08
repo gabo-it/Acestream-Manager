@@ -223,8 +223,12 @@ function recordJobRun(job, status, detail = '', durationMs = 0) {
       String(detail || '').slice(0, 500),
       Math.max(0, Math.round(durationMs))
     );
+    // Conservazione: una settimana di storia, come concordato — più un tetto
+    // di sicurezza a 1000 righe che protegge da burst di job (il limite di
+    // solo righe, prima, rendeva la ritenzione effettiva imprevedibile).
+    db.prepare(`DELETE FROM job_runs WHERE started_at < datetime('now', '-7 days')`).run();
     db.prepare(
-      `DELETE FROM job_runs WHERE id NOT IN (SELECT id FROM job_runs ORDER BY id DESC LIMIT 300)`
+      `DELETE FROM job_runs WHERE id NOT IN (SELECT id FROM job_runs ORDER BY id DESC LIMIT 1000)`
     ).run();
   } catch (err) {
     // La registrazione di un job non deve mai far fallire il job stesso.
