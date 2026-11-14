@@ -3,16 +3,56 @@
 
 <!-- Hero -->
 <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-900/40 p-6 sm:p-8 mb-8">
-  <div class="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-indigo-600/10 blur-3xl"></div>
-  <div class="absolute -bottom-20 -left-10 w-56 h-56 rounded-full bg-purple-600/10 blur-3xl"></div>
+  <div class="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-indigo-600/10 blur-3xl hero-blob-a"></div>
+  <div class="absolute -bottom-20 -left-10 w-56 h-56 rounded-full bg-purple-600/10 blur-3xl hero-blob-b"></div>
 
-  <!-- Segnale in onda: antenna con anelli che si espandono (decorativo,
-       puro CSS — nessuna libreria, si disattiva con prefers-reduced-motion) -->
+  <!-- Lucine di studio che scintillano sullo sfondo (posizioni fisse scelte a
+       mano; l'animazione è solo opacità/scala, costa quasi zero) -->
+  <span class="hero-star" style="top:16%; left:8%;  animation-delay:.2s;  animation-duration:3.8s"></span>
+  <span class="hero-star" style="top:64%; left:14%; animation-delay:1.1s; animation-duration:4.6s"></span>
+  <span class="hero-star" style="top:30%; left:26%; animation-delay:2.2s; animation-duration:5.2s"></span>
+  <span class="hero-star" style="top:70%; left:38%; animation-delay:.6s;  animation-duration:4.1s"></span>
+  <span class="hero-star" style="top:20%; left:47%; animation-delay:1.8s; animation-duration:3.5s"></span>
+  <span class="hero-star" style="top:58%; left:58%; animation-delay:.9s;  animation-duration:4.9s"></span>
+  <span class="hero-star" style="top:26%; left:66%; animation-delay:2.7s; animation-duration:4.3s"></span>
+  <span class="hero-star" style="top:72%; left:78%; animation-delay:.4s;  animation-duration:5.6s"></span>
+  <span class="hero-star" style="top:18%; left:86%; animation-delay:1.5s; animation-duration:3.9s"></span>
+  <span class="hero-star" style="top:48%; left:93%; animation-delay:2.4s; animation-duration:4.7s"></span>
+
+  <!-- Sfilata di luce sul "vetro" dello studio: ogni ~11 s una striscia
+       diagonale attraversa il banner e poi riposa -->
+  <div class="hero-sheen" aria-hidden="true"></div>
+
+  <!-- Battito in onda: tracciato EKG che scorre verso l'antenna, come il
+       monitor di una regia (decorativo, puro SVG+CSS — nessuna libreria;
+       il tracciato è periodico di 300 unità: l'animazione trasla di
+       esattamente un periodo, quindi il loop è invisibile) -->
+  <div class="absolute right-0 top-[58%] h-20 w-[68%] pointer-events-none hidden sm:block" aria-hidden="true">
+    <svg class="ekg-svg w-full h-full" viewBox="0 0 1200 100" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="ekg-fade" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0"    stop-color="#f43f5e" stop-opacity="0"/>
+          <stop offset="0.16" stop-color="#f43f5e" stop-opacity="0.9"/>
+          <stop offset="0.8"  stop-color="#fb7185" stop-opacity="0.9"/>
+          <stop offset="1"    stop-color="#fb7185" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <g class="ekg-scroll">
+        <path class="ekg-path" fill="none" stroke="url(#ekg-fade)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"
+          d="M0,50 h40 l15,-14 l15,14 h30 l14,-38 l14,72 l12,-34 h35 l12,-18 l12,18 h40 l10,-10 l10,10 h41 h40 l15,-14 l15,14 h30 l14,-38 l14,72 l12,-34 h35 l12,-18 l12,18 h40 l10,-10 l10,10 h41 h40 l15,-14 l15,14 h30 l14,-38 l14,72 l12,-34 h35 l12,-18 l12,18 h40 l10,-10 l10,10 h41 h40 l15,-14 l15,14 h30 l14,-38 l14,72 l12,-34 h35 l12,-18 l12,18 h40 l10,-10 l10,10 h41 h40 l15,-14 l15,14 h30 l14,-38 l14,72 l12,-34 h35 l12,-18 l12,18 h40 l10,-10 l10,10 h41 h40 l15,-14 l15,14 h30 l14,-38 l14,72 l12,-34 h35 l12,-18 l12,18 h40 l10,-10 l10,10 h41"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Segnale in onda: antenna in un badge circolare che galleggia, con
+       anelli che si espandono (decorativo, puro CSS) -->
   <div class="absolute top-4 right-5 w-28 h-28 pointer-events-none hidden sm:block" aria-hidden="true">
     <span class="broadcast-ring" style="animation-delay: 0s"></span>
     <span class="broadcast-ring" style="animation-delay: 1.2s"></span>
     <span class="broadcast-ring" style="animation-delay: 2.4s"></span>
-    <span class="absolute inset-0 flex items-center justify-center text-3xl select-none" style="filter: drop-shadow(0 0 12px rgba(129,140,248,.35))">📡</span>
+    <span class="absolute inset-0 flex items-center justify-center">
+      <span class="hero-dish w-16 h-16 rounded-full bg-slate-900/70 ring-1 ring-indigo-400/30 flex items-center justify-center text-3xl select-none" style="filter: drop-shadow(0 0 12px rgba(129,140,248,.35))">📡</span>
+    </span>
   </div>
 
   <div class="relative">
@@ -34,6 +74,8 @@
 </div>
 
 <style>
+  /* === Hero "in trasmissione": tutto decorativo, puro CSS, niente JS === */
+
   /* Anelli "segnale in onda" attorno all'antenna nel hero della Dashboard */
   @keyframes broadcast-ring {
     0%   { transform: scale(0.2); opacity: 0.65; }
@@ -74,14 +116,79 @@
     animation: onair-blink 2s ease-in-out infinite;
     flex-shrink: 0;
   }
-  /* Tema chiaro: il hero diventa bianco (light.css) — variante leggibile */
+  /* Antenna: galleggia dolcemente dentro il suo badge circolare */
+  @keyframes hero-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-5px); }
+  }
+  .hero-dish { animation: hero-float 5s ease-in-out infinite; }
+  /* Le due chiazze di colore sullo sfondo derivano lentamente, come luci
+       di studio non focalizzate (solo transform: il blur resta rasterizzato) */
+  @keyframes hero-drift {
+    from { transform: translate(0, 0); }
+    to   { transform: translate(-26px, 16px); }
+  }
+  .hero-blob-a { animation: hero-drift 16s ease-in-out infinite alternate; }
+  .hero-blob-b { animation: hero-drift 21s ease-in-out infinite alternate-reverse; }
+  /* Lucine che scintillano sullo sfondo */
+  @keyframes hero-twinkle {
+    0%, 100% { opacity: 0.06; transform: scale(0.75); }
+    50%      { opacity: 0.75; transform: scale(1.2); }
+  }
+  .hero-star {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 9999px;
+    background: #c7d2fe;
+    opacity: 0.1;
+    animation: hero-twinkle 4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  /* Sfilata di luce: parte fuori a sinistra, attraversa, riposa fuori a
+       destra; il salto di ritorno al loop avviene sempre fuori campo */
+  @keyframes hero-sheen {
+    0%, 55%   { transform: translateX(-130%) skewX(-18deg); }
+    88%, 100% { transform: translateX(430%) skewX(-18deg); }
+  }
+  .hero-sheen {
+    position: absolute;
+    top: -30%;
+    bottom: -30%;
+    left: 0;
+    width: 30%;
+    background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+    transform: translateX(-130%) skewX(-18deg);
+    animation: hero-sheen 11s ease-in-out infinite;
+    pointer-events: none;
+  }
+  /* Battito EKG: il tracciato è periodico di 300 unità e l'animazione trasla
+       di esattamente un periodo, quindi lo scorrimento è un loop perfetto */
+  @keyframes ekg-scroll {
+    to { transform: translateX(-300px); }
+  }
+  .ekg-scroll { animation: ekg-scroll 4s linear infinite; will-change: transform; }
+  .ekg-svg {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 7px rgba(244, 63, 94, 0.35));
+  }
+
+  /* Tema chiaro: il hero diventa bianco (light.css) — varianti leggibili */
   html.light .onair-badge { background: #fef2f2; color: #b91c1c; border-color: rgba(239, 68, 68, 0.4); }
   html.light .broadcast-ring { border-color: rgba(99, 102, 241, 0.45); }
-  /* Rispetta la preferenza "meno animazioni" dell'utente */
+  html.light .hero-star, html.light .hero-sheen { display: none; }
+  html.light .ekg-path { stroke: #6366f1; }
+  html.light .ekg-svg { opacity: 0.55; filter: none; }
+  html.light .hero-dish { background: rgba(238, 242, 255, 0.9); }
+
+  /* Rispetta la preferenza "meno animazioni" dell'utente: tutto statico,
+       ma comunque composto (sheen nascosto del tutto, il resto congelato) */
   @media (prefers-reduced-motion: reduce) {
-    .broadcast-ring, .onair-dot { animation: none; }
+    .broadcast-ring, .onair-dot, .hero-dish, .hero-blob-a, .hero-blob-b,
+    .hero-star, .hero-sheen, .ekg-scroll { animation: none; }
     .broadcast-ring { opacity: 0.18; transform: scale(0.55); }
     .onair-dot { opacity: 1; }
+    .hero-sheen { display: none; }
   }
 </style>
 
