@@ -5,8 +5,24 @@
 <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-900/40 p-6 sm:p-8 mb-8">
   <div class="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-indigo-600/10 blur-3xl"></div>
   <div class="absolute -bottom-20 -left-10 w-56 h-56 rounded-full bg-purple-600/10 blur-3xl"></div>
+
+  <!-- Segnale in onda: antenna con anelli che si espandono (decorativo,
+       puro CSS — nessuna libreria, si disattiva con prefers-reduced-motion) -->
+  <div class="absolute top-4 right-5 w-28 h-28 pointer-events-none hidden sm:block" aria-hidden="true">
+    <span class="broadcast-ring" style="animation-delay: 0s"></span>
+    <span class="broadcast-ring" style="animation-delay: 1.2s"></span>
+    <span class="broadcast-ring" style="animation-delay: 2.4s"></span>
+    <span class="absolute inset-0 flex items-center justify-center text-3xl select-none" style="filter: drop-shadow(0 0 12px rgba(129,140,248,.35))">📡</span>
+  </div>
+
   <div class="relative">
-    <p class="text-indigo-300 text-sm font-medium mb-1"><%= t(greetingKey) %></p>
+    <div class="flex items-center gap-3 flex-wrap mb-1">
+      <p class="text-indigo-300 text-sm font-medium"><%= t(greetingKey) %></p>
+      <span class="onair-badge" title="AceStream Manager">
+        <span class="onair-dot"></span>
+        <span>ON AIR</span>
+      </span>
+    </div>
     <h1 class="text-3xl sm:text-4xl font-bold tracking-tight mb-2"><%= t('dashboard.title') %></h1>
     <p class="text-slate-400 text-sm max-w-lg">
       <%= t('dashboard.hero_subtitle').replace('{count}', channelCount) %>
@@ -16,6 +32,58 @@
     </a>
   </div>
 </div>
+
+<style>
+  /* Anelli "segnale in onda" attorno all'antenna nel hero della Dashboard */
+  @keyframes broadcast-ring {
+    0%   { transform: scale(0.2); opacity: 0.65; }
+    70%  { opacity: 0.12; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+  .broadcast-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 1.5px solid rgba(129, 140, 248, 0.55);
+    animation: broadcast-ring 3.6s ease-out infinite;
+  }
+  /* Badge ON AIR: puntino rosso che "respira", come un presidio in trasmissione */
+  @keyframes onair-blink {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    50%      { opacity: 0.5; box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); }
+  }
+  .onair-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    background: rgba(127, 29, 29, 0.35);
+    color: #fca5a5;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    line-height: 1;
+  }
+  .onair-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background: #ef4444;
+    animation: onair-blink 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  /* Tema chiaro: il hero diventa bianco (light.css) — variante leggibile */
+  html.light .onair-badge { background: #fef2f2; color: #b91c1c; border-color: rgba(239, 68, 68, 0.4); }
+  html.light .broadcast-ring { border-color: rgba(99, 102, 241, 0.45); }
+  /* Rispetta la preferenza "meno animazioni" dell'utente */
+  @media (prefers-reduced-motion: reduce) {
+    .broadcast-ring, .onair-dot { animation: none; }
+    .broadcast-ring { opacity: 0.18; transform: scale(0.55); }
+    .onair-dot { opacity: 1; }
+  }
+</style>
 
 <!-- Statistiche rapide -->
 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

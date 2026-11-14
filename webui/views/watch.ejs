@@ -64,8 +64,9 @@
   <% } %>
 
   <div class="flex gap-2 mt-3">
-    <a href="<%= channel.id ? '/channels/' + channel.id + '/vlc.m3u' : '/vlc-direct.m3u?id=' + channel.acestream_id + '&name=' + encodeURIComponent(channel.name) %>"
-       class="flex-1 text-center rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm font-medium">
+    <a href="<%= channel.id ? '/channels/' + channel.id + '/vlc.m3u' : '/vlc-direct.m3u?id=' + channel.acestream_id %>"
+       class="flex-1 text-center rounded-lg border border-slate-800 hover:bg-slate-800 transition px-4 py-2 text-sm font-medium"
+       title="<%= channel.id ? '' : channel.name %>">
       <%= t('watch.open_vlc') %>
     </a>
     <a href="acestream://<%= channel.acestream_id %>"
