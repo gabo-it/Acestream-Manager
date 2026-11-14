@@ -15,7 +15,7 @@ const { getTranslator } = require('./i18n');
 const { getProgramsForDay } = require('./epg');
 const { getCachedTranslations } = require('./translator');
 const { suggestTvgIds, suggestLogosFromSearch } = require('./suggestions');
-const { searchTeams, getTeamMatches, getUpcomingTeamMatches, getBroadcastersByCountry, parseTeamUrl, getMatchTitle, refreshTeamIndex, getFootballDiagnostics } = require('./football');
+const { searchTeams, getTeamMatches, getUpcomingTeamMatches, getBroadcastersByCountry, parseTeamUrl, refreshTeamIndex, getFootballDiagnostics } = require('./football');
 
 // Formatta un kickoff epoch nel fuso del server (self-hosted = fuso dell'utente).
 function formatKickoff(epoch) {
@@ -828,8 +828,11 @@ app.get('/watch/:id', (req, res) => {
 
 // Come /watch/:id ma per contenuti non ancora salvati come canale (es. un
 // risultato del tab Cerca su cui l'utente vuole solo provare la riproduzione).
+// Il nome NON viaggia più nell'URL (link puliti senza &name=...): se lo
+// stream corrisponde a un canale salvato il nome arriva dal DB, altrimenti
+// resta il generico. Il vecchio ?name= è ancora accettato per non rompere
+// segnalibri e file .m3u generati dalle versioni precedenti.
 app.get('/watch-direct', async (req, res) => {
-  const name = (req.query.name || 'Stream').trim();
   let acestreamId = (req.query.id || '').trim();
   // I risultati del catalogo arrivano come INFOHASH (param ?infohash=):
   // il motore riproduce solo via content id, quindi si risolve prima di
@@ -845,6 +848,8 @@ app.get('/watch-direct', async (req, res) => {
     }
   }
   if (!/^[a-fA-F0-9]{40}$/.test(acestreamId)) return res.status(400).send(reqT()('errors.invalid_acestream_id'));
+  const saved = db.prepare('SELECT name FROM channels WHERE acestream_id = ?').get(acestreamId);
+  const name = (saved && saved.name) || (req.query.name || '').trim() || 'Stream';
   const { tsUrl, tsProxyUrl } = buildStreamUrls(req, acestreamId);
   // alternates: [] serve — il template watch.ejs fa riferimento alla
   // variabile e con EJS un local mai passato è un ReferenceError, non
@@ -876,11 +881,12 @@ app.get('/channels/:id/vlc.m3u', (req, res) => {
 });
 
 app.get('/vlc-direct.m3u', async (req, res) => {
-  const name = (req.query.name || 'Stream').trim();
   let acestreamId = (req.query.id || '').trim();
   // Come per /watch-direct: dal catalogo arriva un infohash, si risolve
   // al content id prima di generare il file (nel .m3u deve finire un URL
-  // che il motore sappia davvero riprodurre).
+  // che il motore sappia davvero riprodurre). Anche qui il nome non viene
+  // più chiesto nell'URL: si usa il canale salvato se c'è, il vecchio
+  // ?name= se presente, altrimenti il generico.
   const infohash = (req.query.infohash || '').trim();
   if (infohash) {
     if (!/^[a-fA-F0-9]{40}$/.test(infohash)) return res.status(400).send(reqT()('errors.invalid_acestream_id'));
@@ -891,6 +897,8 @@ app.get('/vlc-direct.m3u', async (req, res) => {
     }
   }
   if (!/^[a-fA-F0-9]{40}$/.test(acestreamId)) return res.status(400).send(reqT()('errors.invalid_acestream_id'));
+  const savedVlc = db.prepare('SELECT name FROM channels WHERE acestream_id = ?').get(acestreamId);
+  const name = (savedVlc && savedVlc.name) || (req.query.name || '').trim() || 'Stream';
   const { tsUrl } = buildStreamUrls(req, acestreamId);
   sendSingleChannelM3U(res, name, acestreamId, tsUrl);
 });
@@ -1601,95 +1609,6 @@ app.get('/football/match', async (req, res) => {
     });
   }
   render(res, 'football_match', { titleKey: 'football.broadcasters_title', matchUrl, matchTitle, coverage: coverageWithMatches, error });
-});
-
-// Ricerca canali per una partita: usa il titolo ("A vs B") per interrogare
-// l'API di ricerca AceStream e proporre i canali da importare — il
-// complemento di "In your playlist", che mostra solo ciò che si ha già.
-app.get('/football/match/channels', async (req, res) => {
-  const matchUrl = (req.query.url || '').trim();
-  let title = (req.query.teams || '').trim();
-  let error = null;
-
-  // Il titolo arriva normalmente dal link (football.ejs lo conosce);
-  // se manca (link condiviso a mano) lo si scrapa dalla pagina match.
-  if (!title && matchUrl) {
-    try {
-      title = await getMatchTitle(matchUrl);
-    } catch (err) {
-      // Nessun titolo: si può comunque cercare a mano dalla pagina Cerca.
-    }
-  }
-
-  // Query: "A vs B" per prima, poi le due squadre da sole. Se il titolo
-  // non è nel formato atteso si usa tutto come unica query.
-  const vsParts = title.split(/\s+vs\.?\s+/i).map((s) => s.trim()).filter(Boolean);
-  const queries = [];
-  const pushQuery = (q) => {
-    q = q.replace(/\s+/g, ' ').trim();
-    if (q && q.length >= 3 && !queries.some((x) => x.toLowerCase() === q.toLowerCase())) queries.push(q);
-  };
-  if (vsParts.length === 2) {
-    pushQuery(`${vsParts[0]} ${vsParts[1]}`);
-    vsParts.forEach(pushQuery);
-  } else {
-    pushQuery(title);
-  }
-  queries.splice(3);
-
-  // Le query partono in parallelo: in sequenza tre ricerche da ~10 s di
-  // timeout ciascuna rendevano la pagina lentissima (e il motore cerca
-  // già abbastanza piano da solo).
-  const settled = await Promise.allSettled(
-    queries.map((q) => searchAceStream(q, { pageSize: 20 }))
-  );
-  let results = [];
-  let failedQueries = 0;
-  for (const s of settled) {
-    if (s.status === 'fulfilled') results.push(...s.value.results);
-    else failedQueries += 1;
-  }
-
-  // Dedup per infohash (la stessa stream emerge da più query) e ranking:
-  // prima quelle il cui nome cita una delle due squadre, poi le altre.
-  const seen = new Map();
-  for (const r of results) {
-    if (!r.infohash) continue;
-    if (!seen.has(r.infohash)) seen.set(r.infohash, r);
-  }
-  const teamTokens = vsParts.map((t) => t.toLowerCase()).filter(Boolean);
-  // Confronto a livello di parola con prefisso bidirezionale (minimo 4
-  // caratteri): i nomi completi di livesoccertv ("Internazionale") devono
-  // trovare anche gli stream che li abbreviano ("Inter HD") — cosa che il
-  // vecchio includes(squadra.slice(0, 6)) mancava, segnando "non
-  // pertinente" proprio gli stream giusti.
-  const isRelevant = (name) => {
-    const words = (name || '').toLowerCase().split(/[^a-z0-9\u00C0-\u024F]+/).filter(Boolean);
-    return words.some((w) =>
-      teamTokens.some((t) => (w.length >= 4 && t.startsWith(w)) || (t.length >= 4 && w.startsWith(t)))
-    );
-  };
-  const merged = [...seen.values()].map((r) => ({ ...r, relevant: isRelevant(r.name) }));
-  merged.sort(
-    (a, b) =>
-      Number(b.relevant) - Number(a.relevant) ||
-      (b.status === 2) - (a.status === 2) ||
-      a.name.localeCompare(b.name)
-  );
-
-  if (!queries.length) error = 'no-title';
-  else if (failedQueries === queries.length) error = 'search-unavailable';
-
-  const acexyBaseUrl = getSetting('acexy_base_url', 'http://acexy:8080').replace(/\/$/, '');
-  render(res, 'football_match_channels', {
-    titleKey: 'football.find_channels_title',
-    matchUrl,
-    matchTitle: title,
-    queries,
-    results: merged,
-    error,
-    acexyBaseUrl,
-  });
 });
 
 // ---------- Health (cronologia job + affidabilità canali) ----------

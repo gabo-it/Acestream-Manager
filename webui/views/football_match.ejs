@@ -4,19 +4,6 @@
 
 <h1 class="text-2xl font-bold mb-4"><%= t('football.broadcasters_title') %></h1>
 
-<% if (matchUrl) { %>
-  <div class="mb-6">
-    <!-- teams= evita un secondo scaricamento della pagina match lato
-         server: il titolo è già noto qui (estratto dallo stesso HTML
-         delle emittenti). Se vuoto, la pagina canali ripiega sullo scrape. -->
-    <a href="/football/match/channels?url=<%= encodeURIComponent(matchUrl) %>&teams=<%= encodeURIComponent(matchTitle || '') %>"
-       class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition px-4 py-2 text-sm font-medium">
-      🔎 <%= t('football.find_channels') %>
-    </a>
-    <p class="text-xs text-slate-500 mt-2"><%= t('football.find_channels_hint') %></p>
-  </div>
-<% } %>
-
 <% if (error) { %>
   <div class="rounded-lg border border-red-900 bg-red-950/40 text-red-300 px-4 py-3 text-sm mb-6">
     <%= t('football.search_failed') %>: <%= error %>
