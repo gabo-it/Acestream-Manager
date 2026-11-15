@@ -159,6 +159,11 @@ services:
     environment:
       # ~200MB RAM per language loaded — adjust to your actual EPG languages.
       LT_LOAD_ONLY: en,it,ru
+      # 1 gunicorn worker (image default is per-core and each worker copies
+      # all language models into RAM) + no model re-check at startup —
+      # together they keep boot light so a small VM never gets starved.
+      WEB_CONCURRENCY: "1"
+      LT_UPDATE_MODELS: "false"
     volumes:
       - libretranslate-models:/home/libretranslate/.local
     networks:
