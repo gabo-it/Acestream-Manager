@@ -96,6 +96,18 @@ services:
     environment:
       # ~200MB RAM per language loaded — adjust to your actual EPG languages.
       LT_LOAD_ONLY: "${LIBRETRANSLATE_LANGUAGES:-en,it,ru}"
+      # One gunicorn worker. The image defaults to one worker per CPU core
+      # and every worker loads its OWN full copy of the language models, so
+      # extra workers multiply RAM and startup disk I/O for no real gain —
+      # EPG translation here is occasional, not a busy public API.
+      WEB_CONCURRENCY: "1"
+      # Never re-check/download Argos models at startup. With model updates
+      # enabled the container re-scans (and re-downloads) models on EVERY
+      # boot, regardless of whether updates exist — that startup burst of
+      # disk reads is exactly what can starve a small VM. Models still land
+      # once in the libretranslate-models volume on first run; refresh them
+      # by pulling a newer image instead.
+      LT_UPDATE_MODELS: "false"
     volumes:
       - libretranslate-models:/home/libretranslate/.local
     networks:
