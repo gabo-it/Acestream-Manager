@@ -169,8 +169,12 @@
 
       <div>
         <label class="block text-sm text-slate-400 mb-1"><%= t('settings.libretranslate_url_label') %></label>
-        <input type="url" name="libretranslate_url" value="<%= libretranslateUrl || '' %>" placeholder="http://192.168.1.50:5000"
-               class="w-80 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500" />
+        <div class="flex gap-2 items-center">
+          <input type="url" name="libretranslate_url" value="<%= libretranslateUrl || '' %>" placeholder="http://192.168.1.50:5000"
+                 data-libretranslate-check
+                 class="flex-1 max-w-md rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500" />
+          <span class="text-xs whitespace-nowrap text-slate-500" data-status-for="libretranslate_url">…</span>
+        </div>
         <p class="text-xs text-slate-500 mt-1"><%= t('settings.libretranslate_url_help') %></p>
       </div>
 
@@ -232,4 +236,50 @@
     var ts = parseInt(el.dataset.formatDatetime, 10);
     if (ts) el.textContent = new Date(ts).toLocaleString('en-US');
   });
+
+  // Feedback di raggiungibilità per LibreTranslate, stessa UX del check del
+  // engine in Impostazioni: verifica al caricamento della pagina e a ogni
+  // modifica dell'URL (debounce 800ms), senza attendere il salvataggio.
+  (function () {
+    var MSG_CHECKING = <%- JSON.stringify(t('settings.libretranslate_check_checking')) %>;
+    var MSG_UNREACHABLE = <%- JSON.stringify(t('settings.libretranslate_check_unreachable')) %>;
+    var MSG_NOT_LT = <%- JSON.stringify(t('settings.libretranslate_check_not_libretranslate')) %>;
+    var MSG_REACHABLE = <%- JSON.stringify(t('settings.libretranslate_check_reachable')) %>;
+    var MSG_LANGUAGES = <%- JSON.stringify(t('settings.libretranslate_check_languages')) %>;
+
+    var input = document.querySelector('[data-libretranslate-check]');
+    var statusEl = document.querySelector('[data-status-for="libretranslate_url"]');
+    if (!input || !statusEl) return;
+
+    async function check() {
+      var url = input.value.trim();
+      if (!url) { statusEl.textContent = ''; return; } // vuoto = traduzione disattivata
+      statusEl.textContent = MSG_CHECKING;
+      statusEl.className = 'text-xs whitespace-nowrap text-slate-500';
+      try {
+        var res = await fetch('/settings/check-libretranslate?url=' + encodeURIComponent(url));
+        var data = await res.json();
+        if (data.ok) {
+          statusEl.textContent = '✓ ' + MSG_REACHABLE + (data.languages ? ' · ' + data.languages + ' ' + MSG_LANGUAGES : '');
+          statusEl.className = 'text-xs whitespace-nowrap text-emerald-400';
+        } else if (data.error === 'not_libretranslate') {
+          statusEl.textContent = '⚠ ' + MSG_NOT_LT;
+          statusEl.className = 'text-xs whitespace-nowrap text-amber-400';
+        } else {
+          statusEl.textContent = '✗ ' + MSG_UNREACHABLE;
+          statusEl.className = 'text-xs whitespace-nowrap text-red-400';
+        }
+      } catch (e) {
+        statusEl.textContent = '✗ ' + MSG_UNREACHABLE;
+        statusEl.className = 'text-xs whitespace-nowrap text-red-400';
+      }
+    }
+
+    check();
+    var debounceTimer;
+    input.addEventListener('input', function () {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(check, 800);
+    });
+  })();
 </script>
