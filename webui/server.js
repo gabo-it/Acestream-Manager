@@ -1719,6 +1719,27 @@ app.get('/settings/check-engine', async (req, res) => {
   }
 });
 
+app.get('/settings/check-libretranslate', async (req, res) => {
+  const url = (req.query.url || '').trim().replace(/\/+$/, '');
+  if (!url || !/^https?:\/\/.+/.test(url)) return res.json({ ok: false, error: 'empty' });
+
+  // Ogni istanza LibreTranslate standard espone /languages (array JSON di
+  // {code, name}): se risponde così, il servizio è raggiungibile E davvero
+  // LibreTranslate — non un altro HTTP server per caso sulla stessa porta.
+  try {
+    const r = await fetch(`${url}/languages`, { signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      const langs = await r.json().catch(() => null);
+      if (Array.isArray(langs)) return res.json({ ok: true, languages: langs.length });
+    }
+    // Qualcosa risponde su quell'URL, ma non è una LibreTranslate valida:
+    // più utile del generico "unreachable" per chi sta configurando.
+    res.json({ ok: false, error: 'not_libretranslate' });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
 // ---------- Export/import configurazione ----------
 
 app.get('/settings/export', (req, res) => {
